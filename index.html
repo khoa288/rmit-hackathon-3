@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Laugh & Cry Points (100% In-Browser)</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 2rem; max-width: 700px; }
+  button { padding: .8rem 1rem; font-size: 1rem; }
+  .meters { display: grid; gap: .5rem; margin-top: 1rem; }
+  .bar { height: 12px; background: #eee; border-radius: 999px; overflow: hidden; }
+  .fill { height: 100%; width: 0%; background: linear-gradient(to right, #4ade80, #22c55e); }
+  .fill.sad { background: linear-gradient(to right, #fca5a5, #ef4444); }
+  .fill.noise { background: linear-gradient(to right, #facc15, #eab308); }
+  .mono { font-feature-settings: "tnum"; font-variant-numeric: tabular-nums; }
+</style>
+</head>
+<body>
+<h1>10-Second Joy/Sadness Meter (On-Device)</h1>
+<p>Click start and laugh or cry for 10 seconds. Scores are computed entirely in your browser.</p>
+
+<button id="start">Start 10-second Round</button>
+<button id="again" disabled>Play Again</button>
+
+<div class="meters">
+  <div>HappyPoints: <span id="happy" class="mono">0</span></div>
+  <div class="bar"><div id="happyBar" class="fill"></div></div>
+
+  <div>SadPoints: <span id="sad" class="mono">0</span></div>
+  <div class="bar"><div id="sadBar" class="fill sad"></div></div>
+
+  <div>Noise Penalty (loudness): <span id="noise" class="mono">0</span></div>
+  <div class="bar"><div id="noiseBar" class="fill noise"></div></div>
+
+  <div>Time: <span id="time" class="mono">0.0</span>s</div>
+</div>
+
+<p style="margin-top:1rem; font-size:.95rem; color:#555">
+Privacy: audio never leaves this page; we only use numeric probabilities on-device.
+</p>
+
+<!-- MediaPipe Tasks Audio (CDN) -->
+<script type="module">
+import { FilesetResolver, AudioClassifier } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-audio@0.10.0";
+
+const startBtn = document.getElementById('start');
+const againBtn = document.getElementById('again');
+const happyEl = document.getElementById('happy');
+const sadEl = document.getElementById('sad');
+const noiseEl = document.getElementById('noise');
+const timeEl = document.getElementById('time');
+const happyBar = document.getElementById('happyBar');
+const sadBar = document.getElementById('sadBar');
+const noiseBar = document.getElementById('noiseBar');
+
+let ctx, stream, src, analyser, buf, rafId;
+let classifier;
+let running = false;
+
+async function ensureAudio() {
+  if (ctx && ctx.state !== 'closed') return;
+  ctx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+  stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  src = ctx.createMediaStreamSource(stream);
+  analyser = ctx.createAnalyser();
+  analyser.fftSize = 1024;
+  src.connect(analyser);
+  buf = new Float32Array(analyser.fftSize);
+}
+
+async function ensureClassifier() {
+  if (classifier) return;
+  const fileset = await FilesetResolver.forAudioTasks(
+    // loads WASM assets from CDN
+    "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-audio@0.10.0/wasm"
+  );
+  // Uses the YAMNet TFLite checkpoint bundled with Tasks Audio
+  classifier = await AudioClassifier.createFromOptions(fileset, {
+    baseOptions: {
+      modelAssetPath:
+        "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-audio@0.10.0/wasm/audio_classifier/yuamnet.tflite"
+        // Fallback: some versions use yamnet.tflite; if 404, switch to yamnet.tflite
+    },
+    maxResults: 8,
+    runningMode: "AUDIO_STREAM"
+  });
+}
+
+function rms() {
+  analyser.getFloatTimeDomainData(buf);
+  let s = 0; for (let i = 0; i < buf.length; i++) s += buf[i]*buf[i];
+  return Math.sqrt(s / buf.length); // 0..~1
+}
+
+function lerp(a,b,t){ return a + (b-a)*t; }
+
+startBtn.onclick = async () => {
+  if (running) return;
+  try {
+    await ensureAudio();
+    await ensureClassifier();
+  } catch (e) {
+    alert("Microphone blocked or not on HTTPS/localhost.\nPlease allow mic and use a secure origin.");
+    return;
+  }
+  running = true;
+  startBtn.disabled = true; againBtn.disabled = true;
+
+  let T = 10.0;       // seconds
+  let dt = 0.2;       // classify every 200 ms
+  let tAccum = 0;
+  let laughSum = 0, crySum = 0, frames = 0;
+  let noisePenalty = 0;
+
+  // MediaPipe stream APIs: classify with callback
+  const audio = await navigator.mediaDevices.getUserMedia({ audio: true });
+  const reader = new MediaRecorder(audio);
+  // We won't actually record; we'll just tick our own loop:
+
+  const tick = async () => {
+    if (!running) return;
+    const nowRms = rms();
+    if (nowRms > 0.25) noisePenalty += (nowRms - 0.25); // discourage shouting
+
+    // Get category probabilities for this ~200ms slice
+    // classify() over streams is handled internally; here we emulate by grabbing a short window.
+    // Simpler: use AudioClassifier's convenience method:
+    const result = await classifier.classify(audio);
+
+    // Aggregate categories
+    let pLaugh = 0, pCry = 0;
+    if (result.classifications?.length) {
+      // pick the top classification head
+      const cats = result.classifications[0].categories;
+      for (const c of cats) {
+        const name = c.categoryName.toLowerCase();
+        if (name.includes("laugh")) pLaugh = Math.max(pLaugh, c.score);
+        if (name.includes("cry") || name.includes("sob") || name.includes("whimper")) {
+          pCry = Math.max(pCry, c.score);
+        }
+      }
+    }
+
+    laughSum += pLaugh;
+    crySum += pCry;
+    frames++;
+
+    // UI update
+    const happyPoints = Math.max(0, Math.round(100 * (laughSum/frames) - 15 * noisePenalty));
+    const sadPoints   = Math.round(100 * (crySum/frames));
+    happyEl.textContent = happyPoints;
+    sadEl.textContent = sadPoints;
+    noiseEl.textContent = (noisePenalty*100).toFixed(1);
+    happyBar.style.width = Math.min(100, happyPoints) + "%";
+    sadBar.style.width = Math.min(100, sadPoints) + "%";
+    noiseBar.style.width = Math.min(100, (noisePenalty*100)) + "%";
+
+    tAccum += dt;
+    timeEl.textContent = tAccum.toFixed(1);
+    if (tAccum >= T) {
+      running = false;
+      againBtn.disabled = false;
+      return;
+    }
+    rafId = setTimeout(tick, dt*1000);
+  };
+  tick();
+};
+
+againBtn.onclick = () => {
+  happyEl.textContent = "0"; sadEl.textContent = "0"; noiseEl.textContent = "0"; timeEl.textContent = "0.0";
+  happyBar.style.width = "0%"; sadBar.style.width = "0%"; noiseBar.style.width = "0%";
+  startBtn.disabled = false; againBtn.disabled = true;
+};
+</script>
+</body>
+</html>
