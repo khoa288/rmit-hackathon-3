@@ -3,175 +3,424 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Laugh & Cry Points (100% In-Browser)</title>
+<title>Joy / Sadness Points — 100% In-Browser</title>
 <style>
-  body { font-family: system-ui, sans-serif; margin: 2rem; max-width: 700px; }
-  button { padding: .8rem 1rem; font-size: 1rem; }
-  .meters { display: grid; gap: .5rem; margin-top: 1rem; }
-  .bar { height: 12px; background: #eee; border-radius: 999px; overflow: hidden; }
-  .fill { height: 100%; width: 0%; background: linear-gradient(to right, #4ade80, #22c55e); }
-  .fill.sad { background: linear-gradient(to right, #fca5a5, #ef4444); }
-  .fill.noise { background: linear-gradient(to right, #facc15, #eab308); }
-  .mono { font-feature-settings: "tnum"; font-variant-numeric: tabular-nums; }
+  :root { --fg:#0f172a; --muted:#475569; --accent:#16a34a; --accent2:#ef4444; --warn:#eab308; }
+  html,body { margin:0; padding:0; background:#fff; color:var(--fg); font-family: system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji"; }
+  .wrap { max-width: 780px; margin: 24px auto; padding: 0 16px; }
+  h1 { font-size: clamp(20px, 3vw, 28px); margin: 0 0 8px; }
+  p { color: var(--muted); margin: 6px 0 14px; }
+  button { cursor: pointer; font-size: 16px; padding: 12px 16px; border-radius: 12px; border: 1px solid #cbd5e1; background:#f8fafc; }
+  button.primary { background: #111827; color: #fff; border-color:#111827; }
+  button:disabled { opacity:.5; cursor:not-allowed; }
+  .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+  .panel { border:1px solid #e2e8f0; border-radius:16px; padding:14px 16px; margin-top:12px; }
+  .mono { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
+  .meters { display:grid; gap:10px; }
+  .meter { display:grid; grid-template-columns: 130px 1fr 60px; gap:10px; align-items:center; }
+  .bar { height: 14px; background:#eef2f7; border-radius:999px; overflow:hidden; }
+  .fill { height:100%; width:0%; background:linear-gradient(90deg, #86efac, var(--accent)); transition: width .15s linear; }
+  .fill.sad { background:linear-gradient(90deg, #fca5a5, var(--accent2)); }
+  .fill.noise { background:linear-gradient(90deg, #fde68a, var(--warn)); }
+  .kbd { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; background:#f1f5f9; border:1px solid #e2e8f0; padding:2px 6px; border-radius:6px; }
+  .foot { color:#64748b; font-size:13px; margin-top:12px; }
+  .small { font-size:13px; color:#64748b; }
+  .ok { color: #16a34a; }
+  .bad { color: #ef4444; }
+  .warn { color: #eab308; }
+  .spark { height: 40px; background: #0b1220; border-radius: 10px; position: relative; overflow:hidden; }
+  canvas#spark { position:absolute; inset:0; width:100%; height:100%; }
 </style>
 </head>
 <body>
-<h1>10-Second Joy/Sadness Meter (On-Device)</h1>
-<p>Click start and laugh or cry for 10 seconds. Scores are computed entirely in your browser.</p>
+<div class="wrap">
+  <h1>Joy / Sadness Points <span class="small">— runs 100% in your browser</span></h1>
+  <p>Tap <b>Start</b>, we’ll calibrate 2 seconds of room noise, then you get a 10-second round. Laugh for <em>HappyPoints</em>; crying sounds add <em>SadPoints</em>. Shouting triggers a noise penalty. No audio ever leaves the page.</p>
 
-<button id="start">Start 10-second Round</button>
-<button id="again" disabled>Play Again</button>
+  <div class="row">
+    <button id="start" class="primary">Start</button>
+    <button id="stop" disabled>Stop</button>
+    <button id="again" disabled>Play Again</button>
+    <span id="status" class="small">Idle.</span>
+  </div>
 
-<div class="meters">
-  <div>HappyPoints: <span id="happy" class="mono">0</span></div>
-  <div class="bar"><div id="happyBar" class="fill"></div></div>
+  <div class="panel">
+    <div class="meters">
+      <div class="meter">
+        <div>HappyPoints</div>
+        <div class="bar"><div id="happyBar" class="fill"></div></div>
+        <div class="mono" id="happyVal">0</div>
+      </div>
 
-  <div>SadPoints: <span id="sad" class="mono">0</span></div>
-  <div class="bar"><div id="sadBar" class="fill sad"></div></div>
+      <div class="meter">
+        <div>SadPoints</div>
+        <div class="bar"><div id="sadBar" class="fill sad"></div></div>
+        <div class="mono" id="sadVal">0</div>
+      </div>
 
-  <div>Noise Penalty (loudness): <span id="noise" class="mono">0</span></div>
-  <div class="bar"><div id="noiseBar" class="fill noise"></div></div>
+      <div class="meter">
+        <div>Noise Penalty</div>
+        <div class="bar"><div id="noiseBar" class="fill noise"></div></div>
+        <div class="mono" id="noiseVal">0</div>
+      </div>
 
-  <div>Time: <span id="time" class="mono">0.0</span>s</div>
+      <div class="meter">
+        <div>Time</div>
+        <div class="bar"><div id="timeBar" class="fill" style="background:linear-gradient(90deg,#93c5fd,#2563eb)"></div></div>
+        <div class="mono" id="timeVal">0.0s</div>
+      </div>
+    </div>
+
+    <div class="spark"><canvas id="spark"></canvas></div>
+
+    <div class="foot" id="foot">Model: <span id="modelName">Loading…</span></div>
+  </div>
+
+  <p class="foot">
+    Tip: If mic is blocked, click the <span class="kbd">🔒</span> icon in your browser’s address bar → <b>Site settings</b> → Microphone: <b>Allow</b>. Must be served over <b>HTTPS</b> or <b>http://localhost</b>.
+  </p>
 </div>
 
-<p style="margin-top:1rem; font-size:.95rem; color:#555">
-Privacy: audio never leaves this page; we only use numeric probabilities on-device.
-</p>
+<!-- MediaPipe Tasks Audio (primary path) -->
+<script type="module" id="primary">
+let MP = null, MPClassifier = null, mpReady = false;
 
-<!-- MediaPipe Tasks Audio (CDN) -->
-<script type="module">
 import { FilesetResolver, AudioClassifier } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-audio@0.10.0";
+MP = { FilesetResolver, AudioClassifier };
 
-const startBtn = document.getElementById('start');
-const againBtn = document.getElementById('again');
-const happyEl = document.getElementById('happy');
-const sadEl = document.getElementById('sad');
-const noiseEl = document.getElementById('noise');
-const timeEl = document.getElementById('time');
-const happyBar = document.getElementById('happyBar');
-const sadBar = document.getElementById('sadBar');
-const noiseBar = document.getElementById('noiseBar');
+const modelSpan = document.getElementById('modelName');
+const statusSpan = document.getElementById('status');
 
-let ctx, stream, src, analyser, buf, rafId;
-let classifier;
-let running = false;
-
-async function ensureAudio() {
-  if (ctx && ctx.state !== 'closed') return;
-  ctx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
-  stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-  src = ctx.createMediaStreamSource(stream);
-  analyser = ctx.createAnalyser();
-  analyser.fftSize = 1024;
-  src.connect(analyser);
-  buf = new Float32Array(analyser.fftSize);
+function isSecure() {
+  return window.isSecureContext || location.protocol === 'https:' ||
+         location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 }
 
-async function ensureClassifier() {
-  if (classifier) return;
-  const fileset = await FilesetResolver.forAudioTasks(
-    // loads WASM assets from CDN
-    "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-audio@0.10.0/wasm"
-  );
-  // Uses the YAMNet TFLite checkpoint bundled with Tasks Audio
-  classifier = await AudioClassifier.createFromOptions(fileset, {
-    baseOptions: {
-      modelAssetPath:
-        "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-audio@0.10.0/wasm/audio_classifier/yuamnet.tflite"
-        // Fallback: some versions use yamnet.tflite; if 404, switch to yamnet.tflite
-    },
-    maxResults: 8,
-    runningMode: "AUDIO_STREAM"
-  });
+const ui = {
+  start: document.getElementById('start'),
+  stop: document.getElementById('stop'),
+  again: document.getElementById('again'),
+  happyBar: document.getElementById('happyBar'),
+  sadBar: document.getElementById('sadBar'),
+  noiseBar: document.getElementById('noiseBar'),
+  timeBar: document.getElementById('timeBar'),
+  happyVal: document.getElementById('happyVal'),
+  sadVal: document.getElementById('sadVal'),
+  noiseVal: document.getElementById('noiseVal'),
+  timeVal: document.getElementById('timeVal'),
+  spark: document.getElementById('spark').getContext('2d'),
+};
+
+let AC, ctx, stream, src, analyser, buf, classifier, timerId;
+let running = false, calibrated = false;
+let baseRMS = 0;
+
+const EMA = (a, x) => (a === null ? x : a * 0.8 + x * 0.2);
+let emaLaugh = null, emaCry = null;
+
+function drawSpark(valHappy, valSad) {
+  const c = ui.spark.canvas; const g = ui.spark;
+  c.width = c.clientWidth; c.height = c.clientHeight;
+  g.globalAlpha = 1;
+  // shift left
+  const img = g.getImageData(1, 0, c.width-1, c.height);
+  g.putImageData(img, 0, 0);
+  // clear rightmost column
+  g.fillStyle = '#0b1220';
+  g.fillRect(c.width-1, 0, 1, c.height);
+  // plot two lines
+  const yH = c.height - Math.round(valHappy * c.height);
+  const yS = c.height - Math.round(valSad   * c.height);
+  g.fillStyle = '#22c55e'; g.fillRect(c.width-1, yH, 1, 2);
+  g.fillStyle = '#ef4444'; g.fillRect(c.width-1, yS, 1, 2);
+}
+
+function setUI(h,s,n,t, T=10){
+  ui.happyVal.textContent = `${h}`;
+  ui.sadVal.textContent = `${s}`;
+  ui.noiseVal.textContent = `${n}`;
+  ui.timeVal.textContent = `${t.toFixed(1)}s`;
+  ui.happyBar.style.width = Math.min(100, h) + '%';
+  ui.sadBar.style.width = Math.min(100, s) + '%';
+  ui.noiseBar.style.width = Math.min(100, n) + '%';
+  ui.timeBar.style.width = Math.min(100, (t/T*100)) + '%';
 }
 
 function rms() {
   analyser.getFloatTimeDomainData(buf);
-  let s = 0; for (let i = 0; i < buf.length; i++) s += buf[i]*buf[i];
-  return Math.sqrt(s / buf.length); // 0..~1
+  let s = 0; for (let i=0;i<buf.length;i++) s += buf[i]*buf[i];
+  return Math.sqrt(s/buf.length);
 }
 
-function lerp(a,b,t){ return a + (b-a)*t; }
+async function ensureAudio() {
+  if (!isSecure()) throw new Error('SECURE_CONTEXT');
+  const ACtor = window.AudioContext || window.webkitAudioContext;
+  AC = ACtor;
+  ctx = new AC({ sampleRate: 16000 });
+  if (ctx.state === 'suspended') await ctx.resume();
+  stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  src = ctx.createMediaStreamSource(stream);
+  analyser = ctx.createAnalyser(); analyser.fftSize = 1024;
+  buf = new Float32Array(analyser.fftSize);
+  src.connect(analyser);
+}
 
-startBtn.onclick = async () => {
-  if (running) return;
+async function ensureClassifier() {
+  if (classifier) return;
+  const fileset = await MP.FilesetResolver.forAudioTasks(
+    "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-audio@0.10.0/wasm"
+  );
+  // Try two known filenames, some CDN versions rename the asset
+  let modelUrlA = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-audio@0.10.0/wasm/audio_classifier/yamnet.tflite";
+  let modelUrlB = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-audio@0.10.0/wasm/audio_classifier/yuamnet.tflite"; // fallback typo in some builds
   try {
-    await ensureAudio();
-    await ensureClassifier();
-  } catch (e) {
-    alert("Microphone blocked or not on HTTPS/localhost.\nPlease allow mic and use a secure origin.");
-    return;
+    classifier = await MP.AudioClassifier.createFromOptions(fileset, {
+      baseOptions: { modelAssetPath: modelUrlA },
+      maxResults: 8, runningMode: "AUDIO_STREAM"
+    });
+    modelSpan.innerHTML = `MediaPipe YAMNet <span class="ok">(primary)</span>`;
+    mpReady = true;
+  } catch (e1) {
+    try {
+      classifier = await MP.AudioClassifier.createFromOptions(fileset, {
+        baseOptions: { modelAssetPath: modelUrlB },
+        maxResults: 8, runningMode: "AUDIO_STREAM"
+      });
+      modelSpan.innerHTML = `MediaPipe YAMNet (alt path) <span class="ok">(primary)</span>`;
+      mpReady = true;
+    } catch (e2) {
+      throw new Error('MP_FAIL');
+    }
   }
-  running = true;
-  startBtn.disabled = true; againBtn.disabled = true;
+}
 
-  let T = 10.0;       // seconds
-  let dt = 0.2;       // classify every 200 ms
-  let tAccum = 0;
-  let laughSum = 0, crySum = 0, frames = 0;
-  let noisePenalty = 0;
+async function classifyTickMP(mediaStream, onFrame) {
+  // MediaPipe web API accepts a MediaStream (browser will chunk internally)
+  const result = await classifier.classify(mediaStream);
+  onFrame(result);
+}
 
-  // MediaPipe stream APIs: classify with callback
-  const audio = await navigator.mediaDevices.getUserMedia({ audio: true });
-  const reader = new MediaRecorder(audio);
-  // We won't actually record; we'll just tick our own loop:
+async function startRound() {
+  ui.start.disabled = true; ui.again.disabled = true; ui.stop.disabled = false;
+  statusSpan.textContent = 'Calibrating 2s… stay quiet.';
+  running = true; calibrated = false;
+  emaLaugh = emaCry = null;
 
-  const tick = async () => {
+  // 2s calibration for baseline RMS
+  let calSamples = 0, calSum = 0;
+  const t0 = performance.now();
+  while (running && performance.now() - t0 < 2000) {
+    calSum += rms(); calSamples++;
+    await new Promise(r=>setTimeout(r, 50));
+  }
+  baseRMS = calSamples ? calSum / calSamples : 0.0;
+  calibrated = true;
+  statusSpan.textContent = 'Go! 10s round…';
+
+  let laughSum = 0, crySum = 0, frames = 0, loudPenalty = 0;
+  let t = 0; const T = 10; const dt = 200; // ms
+  const loop = async () => {
     if (!running) return;
-    const nowRms = rms();
-    if (nowRms > 0.25) noisePenalty += (nowRms - 0.25); // discourage shouting
 
-    // Get category probabilities for this ~200ms slice
-    // classify() over streams is handled internally; here we emulate by grabbing a short window.
-    // Simpler: use AudioClassifier's convenience method:
-    const result = await classifier.classify(audio);
+    // per-frame noise / shout penalty
+    const r = rms();
+    const threshold = baseRMS + 0.10;
+    if (r > threshold) loudPenalty += Math.min(0.03, r - threshold); // clamp per tick
 
-    // Aggregate categories
+    // classify this slice
     let pLaugh = 0, pCry = 0;
-    if (result.classifications?.length) {
-      // pick the top classification head
-      const cats = result.classifications[0].categories;
-      for (const c of cats) {
-        const name = c.categoryName.toLowerCase();
-        if (name.includes("laugh")) pLaugh = Math.max(pLaugh, c.score);
-        if (name.includes("cry") || name.includes("sob") || name.includes("whimper")) {
-          pCry = Math.max(pCry, c.score);
+    try {
+      await classifyTickMP(stream, (result) => {
+        const cats = result.classifications?.[0]?.categories || [];
+        for (const c of cats) {
+          const n = (c.categoryName || '').toLowerCase();
+          if (n.includes('laugh')) pLaugh = Math.max(pLaugh, c.score);
+          if (n.includes('cry') || n.includes('sob') || n.includes('whimper')) pCry = Math.max(pCry, c.score);
         }
-      }
+      });
+    } catch (e) {
+      // If MP fails mid-run, we’ll abort and let fallback layer take over on next start
+      console.warn('MediaPipe classify error:', e);
     }
 
-    laughSum += pLaugh;
-    crySum += pCry;
+    // EMA smoothing to reduce spikes
+    emaLaugh = EMA(emaLaugh, pLaugh);
+    emaCry   = EMA(emaCry,   pCry);
+
+    laughSum += (emaLaugh ?? pLaugh);
+    crySum   += (emaCry   ?? pCry);
     frames++;
 
-    // UI update
-    const happyPoints = Math.max(0, Math.round(100 * (laughSum/frames) - 15 * noisePenalty));
-    const sadPoints   = Math.round(100 * (crySum/frames));
-    happyEl.textContent = happyPoints;
-    sadEl.textContent = sadPoints;
-    noiseEl.textContent = (noisePenalty*100).toFixed(1);
-    happyBar.style.width = Math.min(100, happyPoints) + "%";
-    sadBar.style.width = Math.min(100, sadPoints) + "%";
-    noiseBar.style.width = Math.min(100, (noisePenalty*100)) + "%";
+    // Scores
+    const happy = Math.max(0, Math.round(100 * (laughSum/frames) - 15 * loudPenalty));
+    const sad   = Math.round(100 * (crySum/frames));
+    const noise = Math.round(100 * loudPenalty);
 
-    tAccum += dt;
-    timeEl.textContent = tAccum.toFixed(1);
-    if (tAccum >= T) {
+    setUI(happy, sad, noise, t/1000, T);
+    drawSpark(Math.min(1, emaLaugh ?? pLaugh), Math.min(1, emaCry ?? pCry));
+
+    t += dt;
+    if (t >= T*1000) {
       running = false;
-      againBtn.disabled = false;
+      ui.again.disabled = false; ui.stop.disabled = true;
+      statusSpan.textContent = 'Finished. Press “Play Again” for another round.';
       return;
     }
-    rafId = setTimeout(tick, dt*1000);
+    timerId = setTimeout(loop, dt);
   };
-  tick();
+  loop();
+}
+
+ui.start.onclick = async () => {
+  try {
+    if (!isSecure()) throw new Error('SECURE_CONTEXT');
+
+    // Chrome cached block? Tell user specifically.
+    try {
+      const p = await navigator.permissions.query({ name: 'microphone' });
+      if (p.state === 'denied') throw new Error('PERM_DENIED_CACHED');
+    } catch (_) { /* Safari lacks this API; ignore */ }
+
+    // Init audio + model (primary path)
+    if (!ctx) await ensureAudio();
+    if (!classifier) await ensureClassifier();
+
+    await startRound();
+  } catch (e) {
+    console.error(e);
+    if (e.message === 'SECURE_CONTEXT') {
+      alert('Microphone needs HTTPS or http://localhost.\nOpen via GitHub Pages or a local server.');
+    } else if (e.message === 'PERM_DENIED_CACHED') {
+      alert('Microphone is blocked for this site.\nClick the lock icon → Site settings → Microphone: Allow, then reload.');
+    } else if (e.message === 'MP_FAIL') {
+      // Fallback to TFJS YAMNet
+      document.getElementById('primary').remove(); // prevent re-run
+      await loadTFJSFallback();
+    } else if (e.name === 'NotAllowedError' || e.name === 'SecurityError') {
+      alert('Microphone permission denied. Allow mic access in site settings, then reload.');
+    } else {
+      alert('Could not access the microphone. Check site permissions and try again.');
+    }
+  }
 };
 
-againBtn.onclick = () => {
-  happyEl.textContent = "0"; sadEl.textContent = "0"; noiseEl.textContent = "0"; timeEl.textContent = "0.0";
-  happyBar.style.width = "0%"; sadBar.style.width = "0%"; noiseBar.style.width = "0%";
-  startBtn.disabled = false; againBtn.disabled = true;
+ui.stop.onclick = () => { running = false; ui.stop.disabled = true; ui.again.disabled = false; statusSpan.textContent = 'Stopped.'; clearTimeout(timerId); };
+ui.again.onclick = () => { // reset UI
+  ui.happyVal.textContent='0'; ui.sadVal.textContent='0'; ui.noiseVal.textContent='0'; ui.timeVal.textContent='0.0s';
+  ui.happyBar.style.width='0%'; ui.sadBar.style.width='0%'; ui.noiseBar.style.width='0%'; ui.timeBar.style.width='0%';
+  const g = ui.spark; g.fillStyle = '#0b1220'; g.fillRect(0,0,g.canvas.width,g.canvas.height);
+  ui.again.disabled = true; ui.start.disabled = false; statusSpan.textContent = 'Ready.';
 };
+
+// ---------- TFJS FALLBACK (if MediaPipe model path fails) ----------
+async function loadTFJSFallback(){
+  modelSpan.innerHTML = 'Loading TFJS YAMNet fallback…';
+  // Load TFJS + YAMNet via CDN
+  await new Promise((res,rej)=>{ const s=document.createElement('script'); s.src='https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.18.0/dist/tf.min.js'; s.onload=res; s.onerror=rej; document.head.appendChild(s); });
+  await new Promise((res,rej)=>{ const s=document.createElement('script'); s.src='https://cdn.jsdelivr.net/npm/@tensorflow-models/yamnet@1.0.1/dist/yamnet.min.js'; s.onload=res; s.onerror=rej; document.head.appendChild(s); });
+
+  const ACtor = window.AudioContext || window.webkitAudioContext;
+  if (!ctx) { ctx = new ACtor({ sampleRate: 16000 }); stream = await navigator.mediaDevices.getUserMedia({audio:true}); src = ctx.createMediaStreamSource(stream); analyser = ctx.createAnalyser(); analyser.fftSize=1024; buf=new Float32Array(analyser.fftSize); src.connect(analyser); }
+  const model = await window.yamnet.load(); // returns TFJS YAMNet model
+  modelSpan.innerHTML = `TFJS YAMNet <span class="warn">(fallback)</span>`;
+
+  // ring buffer for ~1.0 s window @ 16k
+  const sp = ctx.createScriptProcessor(16384, 1, 1);
+  src.connect(sp); sp.connect(ctx.destination);
+
+  let ring = new Float32Array(16000), ridx = 0;
+  sp.onaudioprocess = (e)=> {
+    const x = e.inputBuffer.getChannelData(0);
+    for (let i=0;i<x.length;i++){ ring[ridx++] = x[i]; if (ridx===ring.length) ridx=0; }
+  };
+
+  // Override start handler to use TFJS inference
+  ui.start.onclick = async () => {
+    try{
+      if (!isSecure()) throw new Error('SECURE_CONTEXT');
+      if (ctx.state==='suspended') await ctx.resume();
+
+      // calibration
+      ui.start.disabled=true; ui.stop.disabled=false; ui.again.disabled=true; statusSpan.textContent='Calibrating 2s… stay quiet.';
+      running=true; emaLaugh=emaCry=null;
+      let cal=0,cnt=0; const t0=performance.now();
+      while (running && performance.now()-t0<2000){ cal+=rms(); cnt++; await new Promise(r=>setTimeout(r,50)); }
+      baseRMS = cnt?cal/cnt:0; statusSpan.textContent='Go! 10s round…';
+
+      let laughSum=0, crySum=0, frames=0, loudPenalty=0;
+      let t=0; const T=10; const dt=250;
+
+      const loop = async () => {
+        if (!running) return;
+
+        // penalty
+        const r = rms(); const threshold = baseRMS + 0.10;
+        if (r>threshold) loudPenalty += Math.min(0.03, r - threshold);
+
+        // gather a 1.0s slice from the ring (copy, starting at ridx)
+        const slice = new Float32Array(16000);
+        const tail = ring.length - ridx;
+        slice.set(ring.subarray(ridx), 0);
+        slice.set(ring.subarray(0, ridx).subarray(0, 16000 - tail), tail);
+
+        // TFJS inference
+        const pred = await model.predict(slice); // returns { scores: Float32Array, spectrogram:..., embeddings:... } OR an array of frames x 521
+        // Normalize to one averaged vector across frames:
+        const scores = Array.isArray(pred) ? pred[0] : pred.scores;
+        // Map label indices to names
+        const labels = window.yamnet.YAMNET_CLASSES;
+        // Compute probabilities of interest (avg of frames)
+        const findProb = (needle) => {
+          let p=0, c=0;
+          for (let i=0;i<labels.length;i++){
+            const name = labels[i].toLowerCase();
+            if (name.includes(needle)) { p += scores[i]; c++; }
+          }
+          return c ? p/c : 0;
+        };
+        const pLaugh = Math.max(findProb('laughter'), findProb('giggl')); // include giggle
+        const pCry   = Math.max(findProb('cry'), findProb('sob'), findProb('whimper'));
+
+        emaLaugh = EMA(emaLaugh, pLaugh);
+        emaCry   = EMA(emaCry,   pCry);
+
+        laughSum += (emaLaugh ?? pLaugh);
+        crySum   += (emaCry   ?? pCry);
+        frames++;
+
+        const happy = Math.max(0, Math.round(100 * (laughSum/frames) - 15 * loudPenalty));
+        const sad   = Math.round(100 * (crySum/frames));
+        const noise = Math.round(100 * loudPenalty);
+
+        setUI(happy, sad, noise, t/1000, T);
+        drawSpark(Math.min(1, emaLaugh ?? pLaugh), Math.min(1, emaCry ?? pCry));
+
+        t += dt;
+        if (t >= T*1000) {
+          running=false; ui.again.disabled=false; ui.stop.disabled=true; statusSpan.textContent='Finished. Press “Play Again”.'; return;
+        }
+        timerId = setTimeout(loop, dt);
+      };
+      loop();
+
+    } catch(e){
+      console.error(e);
+      if (e.message==='SECURE_CONTEXT') alert('Needs HTTPS or http://localhost.');
+      else alert('Microphone blocked. Allow mic in site settings and reload.');
+    }
+  };
+
+  // Keep stop/again behavior
+  ui.stop.onclick = () => { running=false; ui.stop.disabled=true; ui.again.disabled=false; statusSpan.textContent='Stopped.'; clearTimeout(timerId); };
+  ui.again.onclick = () => { ui.happyVal.textContent='0'; ui.sadVal.textContent='0'; ui.noiseVal.textContent='0'; ui.timeVal.textContent='0.0s';
+    ui.happyBar.style.width='0%'; ui.sadBar.style.width='0%'; ui.noiseBar.style.width='0%'; ui.timeBar.style.width='0%';
+    const g=ui.spark; g.fillStyle='#0b1220'; g.fillRect(0,0,g.canvas.width,g.canvas.height);
+    ui.again.disabled=true; ui.start.disabled=false; statusSpan.textContent='Ready.';
+  };
+
+  // Automatically start now that fallback is ready
+  statusSpan.textContent = 'Fallback ready. Press Start.';
+}
 </script>
 </body>
 </html>
