@@ -1,471 +1,770 @@
 <!doctype html>
 <html lang="en">
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Laugh & Shake — Local Scoreboards (100% in-browser)</title>
-<style>
-  :root { --fg:#0f172a; --muted:#64748b; --ok:#16a34a; --bad:#ef4444; --warn:#eab308; --line:#e2e8f0; }
-  html,body{margin:0;padding:0;background:#fff;color:var(--fg);font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial}
-  .wrap{max-width:920px;margin:24px auto;padding:0 16px}
-  h1{margin:0 0 8px}
-  p.muted{color:var(--muted)}
-  .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
-  .panel{border:1px solid var(--line);border-radius:16px;padding:14px 16px;margin-top:12px}
-  input,button{font-size:16px;padding:10px 12px;border-radius:12px;border:1px solid #cbd5e1;background:#f8fafc}
-  button.primary{background:#111827;color:#fff;border-color:#111827;cursor:pointer}
-  button:disabled{opacity:.6;cursor:not-allowed}
-  .tabs{display:flex;gap:8px;margin-top:8px}
-  .tab{padding:8px 12px;border:1px solid #cbd5e1;border-radius:999px;background:#f8fafc;cursor:pointer}
-  .tab.active{background:#111827;color:#fff;border-color:#111827}
-  .mono{font-variant-numeric:tabular-nums;font-feature-settings:"tnum"}
-  .ok{color:var(--ok)} .bad{color:var(--bad)} .warn{color:var(--warn)} .muted2{color:#94a3b8}
-  .bar{height:14px;background:#e5e7eb;border-radius:999px;overflow:hidden;width:420px;max-width:100%}
-  .fill{height:100%;width:0%;background:linear-gradient(90deg,#93c5fd,#2563eb);transition:width .12s linear}
-  .fill.green{background:linear-gradient(90deg,#86efac,#16a34a)}
-  .fill.yellow{background:linear-gradient(90deg,#fde68a,#f59e0b)}
-  table{width:100%;border-collapse:collapse;margin-top:8px}
-  th,td{padding:8px 6px;border-bottom:1px solid #eef2f7;text-align:left}
-  details{margin-top:8px}
-  pre{background:#0b1220;color:#e5e7eb;padding:.75rem 1rem;border-radius:.5rem;overflow:auto;max-height:200px}
-</style>
-
-<div class="wrap">
-  <h1>Laugh & Shake — Local Scoreboards</h1>
-  <p class="muted">Choose a mode. Run a 10-second round. Your **personal bests** (per mode) are saved locally on this device/browser.</p>
-
-  <div class="panel">
-    <div class="row">
-      <label for="name">Display name</label>
-      <input id="name" maxlength="16" placeholder="1–16 letters, numbers, _ or space" />
-      <button id="saveName" class="primary">Save name</button>
-      <span id="nameStatus" class="muted"></span>
-    </div>
-    <div class="tabs">
-      <button class="tab active" data-mode="laugh">Laugh (mic)</button>
-      <button class="tab" data-mode="shake">Shake (motion)</button>
-    </div>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>TogetherWe — Laugh & Shake (100% in-browser)</title>
+  <meta name="description" content="TogetherWe: a framework-free web game that nudges joyful habits through 10-second Laugh and Shake challenges. 100% on-device." />
+  <meta name="color-scheme" content="light dark" />
+  <style>
+    /* ========= Core design tokens ========= */
+    :root{
+      --bg:#ffffff;
+      --fg:#0f172a;         /* slate-900 */
+      --muted:#64748b;      /* slate-500 */
+      --line:#e2e8f0;       /* slate-200 */
+      --accent:#2563eb;     /* blue-600 */
+      --accent-2:#22c55e;   /* green-500 */
+      --good:#16a34a;       /* green-600 */
+      --warn:#eab308;       /* amber-500 */
+      --bad:#ef4444;        /* red-500 */
+      --card:#f8fafc;       /* slate-50 */
+      --shadow: 0 10px 25px rgba(2,6,23,.06), 0 2px 8px rgba(2,6,23,.06);
+      --radius-lg: 18px;
+      --radius-xl: 22px;
+      --focus: 0 0 0 3px rgba(37,99,235,.25);
+      --grad-blue: linear-gradient(90deg,#93c5fd,#2563eb);
+      --grad-green: linear-gradient(90deg,#86efac,#16a34a);
+      --grad-yellow: linear-gradient(90deg,#fde68a,#f59e0b);
+    }
+    @media (prefers-color-scheme: dark){
+      :root{
+        --bg:#0b1220; --fg:#e5e7eb; --muted:#94a3b8; --line:#1f2937;
+        --card:#0f172a; --shadow: 0 10px 25px rgba(0,0,0,.35), 0 2px 8px rgba(0,0,0,.25);
+      }
+    }
+    *{box-sizing:border-box}
+    html,body{margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial}
+    a{color:var(--accent);text-decoration:none} a:hover{text-decoration:underline}
+    .wrap{max-width:960px;margin:0 auto;padding:16px}
+    .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+    /* ========= Header ========= */
+    .app-header{position:sticky;top:0;z-index:30;background:rgba(255,255,255,.8);backdrop-filter:saturate(140%) blur(8px);border-bottom:1px solid var(--line)}
+    @media (prefers-color-scheme: dark){.app-header{background:rgba(11,18,32,.7)}}
+    .head-row{display:flex;gap:12px;align-items:center;justify-content:space-between;padding:12px 16px}
+    .brand{display:flex;align-items:center;gap:10px;font-weight:800;letter-spacing:.2px}
+    .brand svg{width:28px;height:28px}
+    .nav{display:flex;gap:8px;flex-wrap:wrap}
+    .chip{padding:8px 14px;border:1px solid var(--line);border-radius:999px;background:var(--card);cursor:pointer;transition:transform .15s ease, background .2s ease, color .2s ease, border-color .2s ease}
+    .chip:hover{transform:translateY(-1px)}
+    .chip.active{background:var(--fg);color:#fff;border-color:var(--fg)}
+    .about-btn{padding:8px 12px;border:1px solid var(--line);border-radius:10px;background:var(--card);cursor:pointer}
+    .banner{background:#fff7ed;color:#7c2d12;border-bottom:1px solid #fed7aa;padding:8px 16px;font-size:14px}
+    /* ========= Panels & layout ========= */
+    .grid{display:grid;grid-template-columns:1fr;gap:14px;margin:16px 0}
+    @media(min-width:840px){.grid{grid-template-columns:1.15fr .85fr}}
+    .panel{border:1px solid var(--line);border-radius:var(--radius-xl);padding:16px;background:var(--card);box-shadow:var(--shadow)}
+    h1{margin:.2rem 0 .15rem;font-size:clamp(22px,3.2vw,30px)}
+    .muted{color:var(--muted)}
+    .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+    .controls .row{align-items:center;gap:10px}
+    input,button{font-size:16px;padding:10px 12px;border-radius:12px;border:1px solid #cbd5e1;background:#f8fafc}
+    @media (prefers-color-scheme: dark){input,button{background:#111827;border-color:#334155;color:var(--fg)}}
+    button.primary{background:var(--fg);color:#fff;border-color:var(--fg);cursor:pointer;transition:opacity .2s ease,transform .08s ease}
+    button.primary:active{transform:translateY(1px)}
+    button:disabled{opacity:.6;cursor:not-allowed}
+    .bar{height:14px;background:#e5e7eb;border-radius:999px;overflow:hidden;width:520px;max-width:100%}
+    @media (prefers-color-scheme: dark){.bar{background:#1f2937}}
+    .fill{height:100%;width:0%;background:var(--grad-blue);transition:width .12s linear}
+    .fill.green{background:var(--grad-green)}
+    .fill.yellow{background:var(--grad-yellow)}
+    .mono{font-variant-numeric:tabular-nums;font-feature-settings:"tnum"}
+    /* ========= FX areas ========= */
+    .fx-area{position:relative;min-height:84px;margin-top:.25rem}
+    #fx-laugh{position:absolute;inset:0;block-size:100%;inline-size:100%;pointer-events:none;border-radius:12px}
+    .shake-viz{position:relative;height:120px;margin-top:.25rem;display:flex;align-items:center;justify-content:center}
+    .bottle{position:relative;width:84px;height:110px;border-radius:20px 20px 16px 16px;background:linear-gradient(180deg,rgba(59,130,246,.25),rgba(59,130,246,.08));border:2px solid rgba(59,130,246,.35);box-shadow:inset 0 2px 8px rgba(37,99,235,.25)}
+    .bottle::before{ /* neck */
+      content:"";position:absolute;top:-20px;left:22px;width:40px;height:24px;border-radius:8px;background:rgba(59,130,246,.2);border:2px solid rgba(59,130,246,.35)
+    }
+    .foam{position:absolute;bottom:0;left:0;right:0;height:20%;background:radial-gradient(ellipse at 50% 0%,rgba(255,255,255,.95),rgba(255,255,255,.75) 60%, transparent 70%);border-bottom-left-radius:14px;border-bottom-right-radius:14px;transition:height .15s linear}
+    /* ========= Table ========= */
+    table{width:100%;border-collapse:collapse;margin-top:8px}
+    th,td{padding:8px 6px;border-bottom:1px solid #eef2f7;text-align:left}
+    @media (prefers-color-scheme: dark){th,td{border-bottom-color:#1f2937}}
+    /* ========= Debug / footer ========= */
+    details{margin-top:8px}
+    pre{background:#0b1220;color:#e5e7eb;padding:.7rem 1rem;border-radius:.7rem;overflow:auto;max-height:220px}
+    footer{margin:32px 0;color:var(--muted);font-size:14px;text-align:center}
+    /* ========= Modal ========= */
+    .modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;z-index:50}
+    .modal[open]{display:flex}
+    .backdrop{position:absolute;inset:0;background:rgba(0,0,0,.45)}
+    .sheet{position:relative;max-width:860px;max-height:80vh;overflow:auto;background:var(--bg);color:var(--fg);padding:18px;border-radius:16px;box-shadow:var(--shadow);border:1px solid var(--line)}
+    .sheet h2{margin:.2rem 0 .6rem}
+    .sheet small{color:var(--muted)}
+    .footnotes{font-size:.92rem}
+    .sheet a{word-break:break-word}
+    /* ========= Toast ========= */
+    .toast{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);background:#0f172a;color:#fff;padding:10px 14px;border-radius:999px;box-shadow:var(--shadow);opacity:0;pointer-events:none;transition:opacity .3s ease, transform .3s ease}
+    .toast.show{opacity:1;transform:translateX(-50%) translateY(-4px)}
+    /* ========= Focus & reduced motion ========= */
+    :focus-visible{outline:none;box-shadow:var(--focus)}
+    @media (prefers-reduced-motion: reduce){
+      .chip:hover{transform:none}
+      .fill{transition:none}
+    }
+  </style>
+</head>
+<body>
+  <!-- Insecure-context banner (HTTPS or localhost required for mic/motion) -->
+  <div id="secureBanner" role="status" class="banner" hidden>
+    For microphone and motion access, open this page over <strong>HTTPS</strong> (e.g., GitHub Pages) or <code>http://localhost</code>.
   </div>
 
-  <div class="panel">
-    <div class="row">
-      <button id="start" class="primary">Start 10s</button>
-      <button id="stop" disabled>Stop</button>
-      <button id="again" disabled>Play Again</button>
-      <span id="status" class="muted">Idle.</span>
+  <!-- Header -->
+  <header class="app-header" aria-label="App header">
+    <div class="head-row wrap">
+      <div class="brand" aria-label="TogetherWe">
+        <svg aria-hidden="true" viewBox="0 0 24 24" fill="none">
+          <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"></circle>
+          <path d="M7.5 10a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Zm9 0a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Z" fill="currentColor"></path>
+          <path d="M7 15c1.4 1.6 3.1 2.4 5 2.4S15.6 16.6 17 15" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path>
+        </svg>
+        <span style="font-size:1.15rem">TogetherWe</span>
+      </div>
+      <nav class="nav" aria-label="Mode switch and info">
+        <!-- These buttons double as the required .tab elements used by the core -->
+        <button class="chip tab active" data-mode="laugh" aria-pressed="true">Laugh</button>
+        <button class="chip tab" data-mode="shake" aria-pressed="false">Shake</button>
+        <button id="aboutBtn" class="about-btn" aria-haspopup="dialog" aria-controls="aboutModal" aria-expanded="false">About & Resources</button>
+      </nav>
     </div>
+  </header>
 
-    <!-- Shared meters -->
-    <div id="laughMeters">
-      <div class="row" style="margin:.6rem 0 0.8rem">
-        <div class="bar"><div id="rmsBar" class="fill"></div></div>
-        <span class="mono" id="rmsTxt">RMS 0.000</span>
-      </div>
-      <div class="row" style="margin:.2rem 0 0.8rem">
-        <div class="bar"><div id="laughBar" class="fill green"></div></div>
-        <span class="mono" id="laughTxt">Laughter 0.0%</span>
-      </div>
-      <div class="row" style="margin:.2rem 0 0.8rem">
-        <div class="bar"><div id="happyBar" class="fill yellow"></div></div>
-        <span class="mono" id="happyTxt">JoyRank 0</span>
-      </div>
+  <main class="wrap" id="main">
+    <h1 class="sr-only">TogetherWe — Laugh & Shake micro-challenges</h1>
+
+    <div class="grid">
+      <!-- Left: Game & meters -->
+      <section class="panel controls" aria-labelledby="ctl-title">
+        <h2 id="ctl-title" style="margin-top:0">Run a 10-second round</h2>
+        <p class="muted" style="margin-top:-6px">Press <strong>Start</strong>, then either laugh (mic) or shake (motion). Your best scores are stored <em>locally</em> on this device.</p>
+
+        <!-- Required control bar -->
+        <div class="row" style="margin-top:6px">
+          <button id="start" class="primary">Start 10s</button>
+          <button id="stop" disabled>Stop</button>
+          <button id="again" disabled>Play Again</button>
+          <span id="status" class="muted" aria-live="polite">Idle.</span>
+        </div>
+
+        <!-- Live meters + FX (Laugh) -->
+        <div id="laughMeters" class="fx-area" aria-live="off">
+          <canvas id="fx-laugh"></canvas>
+          <div class="row" style="margin:.6rem 0 0.8rem">
+            <div class="bar" aria-label="Microphone loudness (RMS)"><div id="rmsBar" class="fill" style="background:var(--grad-blue)"></div></div>
+            <span class="mono" id="rmsTxt">RMS 0.000</span>
+          </div>
+          <div class="row" style="margin:.2rem 0 0.8rem">
+            <div class="bar" aria-label="Laughter probability"><div id="laughBar" class="fill green"></div></div>
+            <span class="mono" id="laughTxt">Laughter 0.0%</span>
+          </div>
+          <div class="row" style="margin:.2rem 0 0.8rem">
+            <div class="bar" aria-label="JoyRank score"><div id="happyBar" class="fill yellow"></div></div>
+            <span class="mono" id="happyTxt">JoyRank 0</span>
+          </div>
+        </div>
+
+        <!-- Live meters + FX (Shake) -->
+        <div id="shakeMeters" class="fx-area" style="display:none" aria-live="off">
+          <div class="row" style="margin:.6rem 0 0.8rem">
+            <div class="bar" aria-label="Acceleration"><div id="accBar" class="fill green"></div></div>
+            <span class="mono" id="accTxt">acc 0.00 m/s²</span>
+          </div>
+          <div class="row" style="margin:.2rem 0 0.8rem">
+            <div class="bar" aria-label="Rotation"><div id="rotBar" class="fill"></div></div>
+            <span class="mono" id="rotTxt">rot 0.0 °/s</span>
+          </div>
+          <div class="row" style="margin:.2rem 0 0.8rem">
+            <div class="bar" aria-label="ShakeRank score"><div id="shakeBar" class="fill yellow"></div></div>
+            <span class="mono" id="shakeTxt">ShakeRank 0</span>
+          </div>
+
+          <!-- Bottle / bouncing viz -->
+          <div class="shake-viz" aria-hidden="true">
+            <div id="bottle" class="bottle">
+              <div id="foam" class="foam"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="row" style="margin-top:.2rem">
+          <div class="mono muted">Time: <span id="t">0.0</span>s</div>
+          <div class="mono muted">Secure: <span id="secure"></span> · Origin: <span id="origin"></span></div>
+          <div class="mono muted" id="permInfo"></div>
+        </div>
+
+        <details>
+          <summary>Debug</summary>
+          <pre id="log" class="mono"></pre>
+        </details>
+      </section>
+
+      <!-- Right: Name + scoreboard -->
+      <aside class="panel" aria-labelledby="score-title">
+        <h2 id="score-title" style="margin-top:0">Your Local Scoreboard</h2>
+        <div class="row" style="margin-bottom:8px">
+          <label for="name">Display name</label>
+          <input id="name" maxlength="16" placeholder="1–16 letters, numbers, _ or space" aria-describedby="nameHelp" />
+          <button id="saveName" class="primary">Save name</button>
+        </div>
+        <div id="nameHelp" class="muted" aria-live="polite"><span id="nameStatus"></span></div>
+
+        <div class="row" style="margin-top:6px">
+          <!-- Using the same .tab elements in header; duplicating here is optional, so we keep scoreboard title only -->
+          <strong>🎯 Mode: <span id="boardTitle">Laugh</span></strong>
+        </div>
+        <table aria-label="Top 10 local scores for current mode">
+          <thead><tr><th>#</th><th>Name</th><th class="mono">Score</th><th class="mono">When</th></tr></thead>
+          <tbody id="scoresBody"><tr><td colspan="4" class="muted">No scores yet.</td></tr></tbody>
+        </table>
+        <p class="muted" style="margin-top:10px">Scores are stored in your browser only (this device).</p>
+      </aside>
     </div>
+  </main>
 
-    <div id="shakeMeters" style="display:none">
-      <div class="row" style="margin:.6rem 0 0.8rem">
-        <div class="bar"><div id="accBar" class="fill green"></div></div>
-        <span class="mono" id="accTxt">acc 0.00 m/s²</span>
-      </div>
-      <div class="row" style="margin:.2rem 0 0.8rem">
-        <div class="bar"><div id="rotBar" class="fill"></div></div>
-        <span class="mono" id="rotTxt">rot 0.0 °/s</span>
-      </div>
-      <div class="row" style="margin:.2rem 0 0.8rem">
-        <div class="bar"><div id="shakeBar" class="fill yellow"></div></div>
-        <span class="mono" id="shakeTxt">ShakeRank 0</span>
-      </div>
-    </div>
+  <footer class="wrap">
+    <div>© TogetherWe · v1.0 · 20 Oct 2025</div>
+  </footer>
 
-    <div class="row" style="margin-top:.2rem">
-      <div class="mono muted">Time: <span id="t">0.0</span>s</div>
-      <div class="mono muted">Secure: <span id="secure"></span> · Origin: <span id="origin"></span></div>
-      <div class="mono muted" id="permInfo"></div>
-    </div>
-  </div>
+  <!-- About & Resources modal -->
+  <dialog id="aboutModal" class="modal" aria-labelledby="aboutTitle" aria-modal="true">
+    <div class="backdrop" data-close></div>
+    <article class="sheet">
+      <header style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+        <h2 id="aboutTitle">About TogetherWe</h2>
+        <button data-close class="about-btn" aria-label="Close">Close</button>
+      </header>
 
-  <div class="panel">
-    <strong>🎯 Your Local Scoreboard — <span id="boardTitle">Laugh</span></strong>
-    <table>
-      <thead><tr><th>#</th><th>Name</th><th class="mono">Score</th><th class="mono">When</th></tr></thead>
-      <tbody id="scoresBody"><tr><td colspan="4" class="muted">No scores yet.</td></tr></tbody>
-    </table>
-  </div>
+      <p><strong>Why TogetherWe?</strong> Many students and young adults in Vietnam and Australia face depression, anxiety, stress, and loneliness. Stigma and access barriers often delay help-seeking in Vietnam’s youth and student communities<span aria-hidden="true">¹</span><sup><a href="#ref-vn">[VN-stigma]</a></sup>. In Australia, recent official data shows <strong>around 1 in 5 adults</strong> experience a mental disorder in a given year, with <strong>anxiety</strong> the most common<sup><a href="#ref-au">[AU-prevalence]</a></sup>.</p>
 
-  <details>
-    <summary>Debug</summary>
-    <pre id="log" class="mono"></pre>
-  </details>
-</div>
+      <p><strong>Our small nudge:</strong> Two playful 10-second micro-challenges — <strong>Laugh</strong> and <strong>Shake</strong> — nudge us toward mood-lifting habits we can do together.</p>
 
-<!-- MediaPipe Tasks Audio (CDN, with fallback handled in JS) -->
-<script type="module">
-/* ========= utilities & UI ========= */
-const $ = s => document.querySelector(s);
-const log = m => ($('#log').textContent += m + "\n");
+      <p><strong>What science says:</strong></p>
+      <ul>
+        <li><strong>Laughter interventions</strong> are associated with <em>meaningful reductions in depression, anxiety, and stress</em> in randomized and quasi-experimental studies; effects tend to be larger with repeated practice<sup><a href="#ref-laugh2024">[Laugh-2024]</a></sup><sup><a href="#ref-laughreview">[Laugh-review]</a></sup>.</li>
+        <li><strong>Physical activity</strong> has <em>moderate, consistent benefits</em> in reducing symptoms of depression and anxiety across populations; recent umbrella/meta-meta analyses reinforce these effects<sup><a href="#ref-bjsm">[PA-BJSM-2023]</a></sup><sup><a href="#ref-mmm">[PA-MMM-2025]</a></sup>.</li>
+      </ul>
 
-const isSecure = () => window.isSecureContext || location.protocol === "https:" ||
-                       location.hostname === "localhost" || location.hostname === "127.0.0.1";
-$("#origin").textContent = location.origin;
-$("#secure").textContent = isSecure() ? "yes" : "no";
+      <p><strong>Do it together:</strong> Social connection + light movement or shared laughter can make the habit stick — and fun wins.</p>
 
-function setStatus(msg, cls="muted"){ const s=$("#status"); s.textContent=msg; s.className=cls; }
-function clamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
-function escapeHtml(s){ return (s||"").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
-function timeAgo(ts){
-  const s = Math.floor((Date.now()- (ts||0))/1000);
-  if (s < 60) return s + "s ago"; const m = Math.floor(s/60); if (m<60) return m+"m ago";
-  const h=Math.floor(m/60); if (h<24) return h+"h ago"; const d=Math.floor(h/24); return d+"d ago";
-}
+      <p><strong>If you need support now:</strong></p>
+      <ul>
+        <li><strong>Australia:</strong> <strong>Lifeline 13&nbsp;11&nbsp;14</strong> (24/7)<sup><a href="#ref-life">[Lifeline]</a></sup>, <strong>Beyond Blue 1300&nbsp;22&nbsp;4636</strong><sup><a href="#ref-bb">[Beyond Blue]</a></sup>; in an emergency, call <strong>000</strong>.</li>
+        <li><strong>Viet Nam:</strong> for medical emergencies call <strong>115</strong>; police <strong>113</strong>; fire <strong>114</strong><sup><a href="#ref-vn-emg">[VN-emg]</a></sup>. If you or someone is in danger, seek local emergency services immediately.</li>
+      </ul>
 
-/* ========= name & local scores ========= */
-const nameInput=$("#name"), nameStatus=$("#nameStatus");
-nameInput.value = localStorage.getItem("playerName") || "";
-$("#saveName").onclick = () => {
-  const n = sanitizeName(nameInput.value);
-  if (!n) { nameStatus.textContent="Enter 1–16 characters (A–Z, a–z, 0–9, space, _)"; nameStatus.className="bad"; return; }
-  localStorage.setItem("playerName", n);
-  nameStatus.textContent="Saved."; nameStatus.className="muted";
-};
+      <p><strong>Privacy:</strong> TogetherWe runs entirely in your browser. Audio and sensor data never leave your device. <em>This is not medical advice.</em></p>
 
-function sanitizeName(s){
-  s=(s||"").trim();
-  return /^[A-Za-z0-9_ ]{1,16}$/.test(s) ? s : "";
-}
+      <hr />
+      <section class="footnotes">
+        <h3 style="margin:.4rem 0 .4rem">References</h3>
+        <ol>
+          <li id="ref-vn">Viet Nam Adolescent Mental Health Survey (V-NAMHS) report (QCMHR, 2023). See discussion of stigma and reduced help-seeking. <a href="https://qcmhr.org/docman/reports/15-vnamhs-report-eng-15-feb-2023/file" target="_blank" rel="noopener">qcmhr.org (PDF)</a>. :contentReference[oaicite:0]{index=0}</li>
+          <li id="ref-au">Australian Institute of Health & Welfare (2025). <em>Prevalence and impact of mental illness</em> (12-month: 22%; 17% anxiety; 8% affective). <a href="https://www.aihw.gov.au/mental-health/overview/prevalence-and-impact-of-mental-illness" target="_blank" rel="noopener">aihw.gov.au</a>. :contentReference[oaicite:1]{index=1}</li>
+          <li id="ref-laughreview">Akimbekov NS et&nbsp;al. (2021). Review/meta-analysis summarizing laughter effects on depression/anxiety. <a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC8496883/" target="_blank" rel="noopener">PMC</a>. :contentReference[oaicite:2]{index=2}</li>
+          <li id="ref-laugh2024">Lin G et&nbsp;al. (2024). Meta-analysis: laughter therapy reduced stress, depression, anxiety. <a href="https://pubmed.ncbi.nlm.nih.gov/39472305/" target="_blank" rel="noopener">PubMed</a>. :contentReference[oaicite:3]{index=3}</li>
+          <li id="ref-bjsm">Singh B et&nbsp;al. (2023). Umbrella review: physical activity improves depression, anxiety, distress. <a href="https://bjsm.bmj.com/content/57/18/1203" target="_blank" rel="noopener">BJSM</a>. :contentReference[oaicite:4]{index=4}</li>
+          <li id="ref-mmm">Singh B et&nbsp;al. (2025). Systematic umbrella review & meta-meta-analysis (exercise reduces depression/anxiety symptoms). <a href="https://pubmed.ncbi.nlm.nih.gov/40239946/" target="_blank" rel="noopener">PubMed</a>, <a href="https://www.jaacap.org/article/S0890-8567%2825%2900208-4/pdf" target="_blank" rel="noopener">JAACAP PDF</a>. :contentReference[oaicite:5]{index=5}</li>
+          <li id="ref-life">Lifeline Australia — 13&nbsp;11&nbsp;14 crisis support. <a href="https://www.lifeline.org.au/" target="_blank" rel="noopener">lifeline.org.au</a>. :contentReference[oaicite:6]{index=6}</li>
+          <li id="ref-bb">Beyond Blue — support & phone 1300&nbsp;22&nbsp;4636. <a href="https://www.beyondblue.org.au/" target="_blank" rel="noopener">beyondblue.org.au</a>. :contentReference[oaicite:7]{index=7}</li>
+          <li id="ref-vn-emg">UK FCDO: Vietnam emergency numbers — Ambulance 115, Police 113, Fire 114. <a href="https://www.gov.uk/foreign-travel-advice/vietnam/getting-help" target="_blank" rel="noopener">gov.uk</a>. :contentReference[oaicite:8]{index=8}</li>
+        </ol>
+      </section>
+    </article>
+  </dialog>
 
-function loadScores(mode){
-  try { return JSON.parse(localStorage.getItem("scores_"+mode) || "[]"); } catch { return []; }
-}
-function saveScore(mode, name, score){
-  const arr = loadScores(mode);
-  arr.push({ name, score, ts: Date.now() });
-  arr.sort((a,b)=> (b.score||0)-(a.score||0));
-  const top = arr.slice(0, 10);
-  localStorage.setItem("scores_"+mode, JSON.stringify(top));
-  renderScores(mode);
-}
-function renderScores(mode){
-  const body = $("#scoresBody");
-  const arr = loadScores(mode);
-  body.innerHTML = "";
-  if (!arr.length){ body.innerHTML = `<tr><td colspan="4" class="muted">No scores yet.</td></tr>`; return; }
-  arr.forEach((row,i)=>{
-    const tr = document.createElement("tr");
-    tr.innerHTML = `<td>${i+1}</td><td>${escapeHtml(row.name||"")}</td><td class="mono">${row.score||0}</td><td class="mono">${timeAgo(row.ts||Date.now())}</td>`;
-    body.appendChild(tr);
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <!-- ========== REQUIRED MEASUREMENT & SCORING CORE (VERBATIM LOGIC) ========== -->
+  <!-- NOTE: IDs in the markup above map 1:1 to what this script expects. Algorithms are unchanged. -->
+  <script type="module">
+  /* ========= utilities & UI ========= */
+  const $ = s => document.querySelector(s);
+  const log = m => ($('#log').textContent += m + "\n");
+
+  const isSecure = () => window.isSecureContext || location.protocol === "https:" ||
+                         location.hostname === "localhost" || location.hostname === "127.0.0.1";
+  $("#origin").textContent = location.origin;
+  $("#secure").textContent = isSecure() ? "yes" : "no";
+
+  function setStatus(msg, cls="muted"){ const s=$("#status"); s.textContent=msg; s.className=cls; }
+  function clamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
+  function escapeHtml(s){ return (s||"").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+  function timeAgo(ts){
+    const s = Math.floor((Date.now()- (ts||0))/1000);
+    if (s < 60) return s + "s ago"; const m = Math.floor(s/60); if (m<60) return m+"m ago";
+    const h=Math.floor(m/60); if (h<24) return h+"h ago"; const d=Math.floor(h/24); return d+"d ago";
+  }
+
+  /* ========= name & local scores ========= */
+  const nameInput=$("#name"), nameStatus=$("#nameStatus");
+  nameInput.value = localStorage.getItem("playerName") || "";
+  $("#saveName").onclick = () => {
+    const n = sanitizeName(nameInput.value);
+    if (!n) { nameStatus.textContent="Enter 1–16 characters (A–Z, a–z, 0–9, space, _)"; nameStatus.className="bad"; return; }
+    localStorage.setItem("playerName", n);
+    nameStatus.textContent="Saved."; nameStatus.className="muted";
+  };
+
+  function sanitizeName(s){
+    s=(s||"").trim();
+    return /^[A-Za-z0-9_ ]{1,16}$/.test(s) ? s : "";
+  }
+
+  function loadScores(mode){
+    try { return JSON.parse(localStorage.getItem("scores_"+mode) || "[]"); } catch { return []; }
+  }
+  function saveScore(mode, name, score){
+    const arr = loadScores(mode);
+    arr.push({ name, score, ts: Date.now() });
+    arr.sort((a,b)=> (b.score||0)-(a.score||0));
+    const top = arr.slice(0, 10);
+    localStorage.setItem("scores_"+mode, JSON.stringify(top));
+    renderScores(mode);
+  }
+  function renderScores(mode){
+    const body = $("#scoresBody");
+    const arr = loadScores(mode);
+    body.innerHTML = "";
+    if (!arr.length){ body.innerHTML = `<tr><td colspan="4" class="muted">No scores yet.</td></tr>`; return; }
+    arr.forEach((row,i)=>{
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td>${i+1}</td><td>${escapeHtml(row.name||"")}</td><td class="mono">${row.score||0}</td><td class="mono">${timeAgo(row.ts||Date.now())}</td>`;
+      body.appendChild(tr);
+    });
+  }
+
+  /* ========= mode tabs ========= */
+  let MODE = "laugh";
+  const tabs = document.querySelectorAll(".tab");
+  tabs.forEach(t => t.onclick = () => {
+    tabs.forEach(x=>{ x.classList.remove("active"); x.setAttribute('aria-pressed','false'); });
+    t.classList.add("active"); t.setAttribute('aria-pressed','true');
+    MODE = t.dataset.mode;
+    $("#boardTitle").textContent = MODE[0].toUpperCase() + MODE.slice(1);
+    $("#laughMeters").style.display = (MODE==="laugh") ? "" : "none";
+    $("#shakeMeters").style.display = (MODE==="shake") ? "" : "none";
+    renderScores(MODE);
+    setStatus("Idle.");
+    $("#again").disabled = true; $("#stop").disabled = true; $("#start").disabled = false;
   });
-}
-
-/* ========= mode tabs ========= */
-let MODE = "laugh";
-const tabs = document.querySelectorAll(".tab");
-tabs.forEach(t => t.onclick = () => {
-  tabs.forEach(x=>x.classList.remove("active")); t.classList.add("active");
-  MODE = t.dataset.mode;
-  $("#boardTitle").textContent = MODE[0].toUpperCase() + MODE.slice(1);
-  $("#laughMeters").style.display = (MODE==="laugh") ? "" : "none";
-  $("#shakeMeters").style.display = (MODE==="shake") ? "" : "none";
   renderScores(MODE);
-  setStatus("Idle.");
-  $("#again").disabled = true; $("#stop").disabled = true; $("#start").disabled = false;
-});
-renderScores(MODE);
 
-/* ========= shared round ctrl ========= */
-let running=false;
-$("#start").onclick = async () => {
-  if (!isSecure()){ alert("Needs HTTPS or http://localhost."); return; }
-  const n = sanitizeName(nameInput.value || localStorage.getItem("playerName"));
-  if (!n){ nameStatus.textContent="Save a valid name first."; nameStatus.className="bad"; return; }
+  /* ========= shared round ctrl ========= */
+  let running=false;
+  $("#start").onclick = async () => {
+    if (!isSecure()){ alert("Needs HTTPS or http://localhost."); return; }
+    const n = sanitizeName(nameInput.value || localStorage.getItem("playerName"));
+    if (!n){ nameStatus.textContent="Save a valid name first."; nameStatus.className="bad"; return; }
 
-  $("#start").disabled = true; $("#again").disabled = true; $("#stop").disabled = false;
-  $("#t").textContent = "0.0";
-  $("#permInfo").textContent = "";
+    $("#start").disabled = true; $("#again").disabled = true; $("#stop").disabled = false;
+    $("#t").textContent = "0.0";
+    $("#permInfo").textContent = "";
 
-  try {
-    if (MODE === "laugh") await startLaughRound(n);
-    else await startShakeRound(n);
-  } catch (e){
-    console.error(e);
-    setStatus(e.message || "Could not start.", "bad");
-    $("#start").disabled=false; $("#stop").disabled=true; $("#again").disabled=false;
-  }
-};
-
-$("#stop").onclick = () => stopRound();
-$("#again").onclick = () => {
-  $("#start").disabled=false; $("#again").disabled=true; $("#stop").disabled=true;
-  setStatus("Ready.");
-  resetMeters();
-};
-
-function stopRound(){
-  running=false;
-  cleanupLaugh();
-  cleanupShake();
-  $("#stop").disabled = true; $("#again").disabled = false;
-  setStatus("Stopped.");
-}
-function resetMeters(){
-  $("#rmsBar").style.width="0%"; $("#rmsTxt").textContent="RMS 0.000";
-  $("#laughBar").style.width="0%"; $("#laughTxt").textContent="Laughter 0.0%";
-  $("#happyBar").style.width="0%"; $("#happyTxt").textContent="JoyRank 0";
-  $("#accBar").style.width="0%"; $("#accTxt").textContent="acc 0.00 m/s²";
-  $("#rotBar").style.width="0%"; $("#rotTxt").textContent="rot 0.0 °/s";
-  $("#shakeBar").style.width="0%"; $("#shakeTxt").textContent="ShakeRank 0";
-  $("#t").textContent="0.0";
-  $("#log").textContent="";
-}
-
-/* ========================= L A U G H  (mic + YAMNet via MediaPipe) ========================= */
-const JSDELIVR = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-audio@0.10.20";
-const UNPKG    = "https://unpkg.com/@mediapipe/tasks-audio@0.10.20";
-const WASM_DIR = "/wasm";
-const MODEL_PRIMARY  = "https://tfhub.dev/google/lite-model/yamnet/classification/tflite/1?lite-format=tflite";
-const MODEL_FALLBACK = "https://storage.googleapis.com/mediapipe-models/audio_classifier/yamnet/float32/1/yamnet.tflite";
-
-let audioClassifier=null, laughCtx=null, analyser=null, meterBuf=null, rafId=0, procNode=null;
-let ring=null, ridx=0, need=0;
-const EMA_ALPHA = 0.2; let emaPct=0;
-let baseRMS=0;
-
-function laughLabel(name){
-  const n=name.toLowerCase();
-  return n.includes("laugh")||n.includes("giggl")||n.includes("chuckle")||n.includes("chortle")||n.includes("snicker");
-}
-
-async function importTasksAudio(){
-  try{ log("Loading @mediapipe/tasks-audio from jsDelivr…"); return await import(JSDELIVR); }
-  catch{ log("Falling back to unpkg…"); return await import(UNPKG); }
-}
-async function ensureClassifier(){
-  if (audioClassifier) return;
-  const { FilesetResolver, AudioClassifier } = await importTasksAudio();
-  let fileset;
-  try{ fileset = await FilesetResolver.forAudioTasks(JSDELIVR + WASM_DIR); }
-  catch{ fileset = await FilesetResolver.forAudioTasks(UNPKG + WASM_DIR); }
-  try {
-    audioClassifier = await AudioClassifier.createFromOptions(fileset, { baseOptions:{ modelAssetPath: MODEL_PRIMARY }, runningMode:"AUDIO_CLIPS" });
-    log("Model loaded from tfhub.");
-  } catch {
-    audioClassifier = await AudioClassifier.createFromOptions(fileset, { baseOptions:{ modelAssetPath: MODEL_FALLBACK }, runningMode:"AUDIO_CLIPS" });
-    log("Model loaded from GCS.");
-  }
-}
-
-function startRmsMeter(source){
-  analyser = laughCtx.createAnalyser(); analyser.fftSize = 1024;
-  meterBuf = new Float32Array(analyser.fftSize);
-  source.connect(analyser);
-  const tick = () => {
-    analyser.getFloatTimeDomainData(meterBuf);
-    let s=0; for (let i=0;i<meterBuf.length;i++) s+=meterBuf[i]*meterBuf[i];
-    const rms = Math.sqrt(s/meterBuf.length);
-    $("#rmsTxt").textContent = "RMS " + rms.toFixed(3);
-    $("#rmsBar").style.width = Math.min(100, rms*200) + "%";
-    rafId = requestAnimationFrame(tick);
-  };
-  tick();
-}
-
-function cleanupLaugh(){
-  try{ procNode && procNode.disconnect(); }catch{}
-  try{ analyser && analyser.disconnect(); }catch{}
-  cancelAnimationFrame(rafId);
-  try{ laughCtx && laughCtx.close(); }catch{}
-  procNode=null; analyser=null; laughCtx=null; audioClassifier && (audioClassifier=null); // leave null so re-init if needed
-}
-
-async function startLaughRound(playerName){
-  setStatus("Preparing mic…");
-  await ensureClassifier();
-
-  const stream = await navigator.mediaDevices.getUserMedia({ audio:true });
-  const AC = window.AudioContext || window.webkitAudioContext;
-  laughCtx = new AC({ sampleRate: 16000 });
-  if (laughCtx.state === "suspended") await laughCtx.resume();
-  const source = laughCtx.createMediaStreamSource(stream);
-
-  // 2s calibration for baseline noise
-  const tmpAnalyser = laughCtx.createAnalyser(); tmpAnalyser.fftSize = 1024;
-  const tmpBuf = new Float32Array(tmpAnalyser.fftSize);
-  source.connect(tmpAnalyser);
-  setStatus("Calibrating 2s… stay quiet.", "warn");
-  let sum=0, cnt=0; const t0=performance.now();
-  while (performance.now()-t0 < 2000){
-    tmpAnalyser.getFloatTimeDomainData(tmpBuf);
-    let ss=0; for (let i=0;i<tmpBuf.length;i++) ss+=tmpBuf[i]*tmpBuf[i];
-    sum += Math.sqrt(ss/tmpBuf.length); cnt++;
-    await new Promise(r=>setTimeout(r, 50));
-  }
-  baseRMS = cnt? (sum/cnt) : 0;
-  try{ source.disconnect(tmpAnalyser); }catch{}
-  setStatus("Go! Laugh for 10s!", "ok");
-
-  // meters + ring buffer for model
-  startRmsMeter(source);
-  ring = new Float32Array(16000); ridx=0; need = ring.length;
-  procNode = laughCtx.createScriptProcessor(16384, 1, 1);
-  source.connect(procNode); procNode.connect(laughCtx.destination);
-
-  // scoring buffers
-  let frames=0, laughSum=0, penalty=0, streak=0, streakBonus=0;
-  emaPct=0;
-
-  running=true;
-  let t=0, T=10_000, dt=250;
-
-  procNode.onaudioprocess = (e) => {
-    const x = e.inputBuffer.getChannelData(0);
-    for (let i=0;i<x.length;i++){ ring[ridx++] = x[i]; if (ridx===ring.length) ridx=0; }
-  };
-
-  // main loop @ 4 Hz
-  const loop = () => {
-    if (!running) return;
-
-    // shout penalty from current RMS
-    analyser.getFloatTimeDomainData(meterBuf);
-    let s=0; for (let i=0;i<meterBuf.length;i++) s+=meterBuf[i]*meterBuf[i];
-    const rms = Math.sqrt(s/meterBuf.length);
-    const thr = baseRMS + 0.10;
-    if (rms > thr) penalty += Math.min(0.03, rms - thr);
-
-    // 1s slice
-    const out = new Float32Array(ring.length);
-    const tail = ring.length - ridx;
-    out.set(ring.subarray(ridx), 0);
-    out.set(ring.subarray(0, ridx), tail);
-
-    // classify (sync)
-    let results=[]; try { results = audioClassifier.classify(out, laughCtx.sampleRate); } catch(err){ log("classify error: "+(err?.message||err)); }
-    const cats = results?.[0]?.classifications?.[0]?.categories || [];
-    const top5 = [...cats].sort((a,b)=>(b.score||0)-(a.score||0)).slice(0,5)
-      .map(c => `${(c.score*100).toFixed(1)}% ${c.categoryName}`).join(" | ");
-    log(top5 || "(no cats)");
-
-    // laughter prob
-    let p=0; for (const c of cats) if (c?.categoryName && laughLabel(c.categoryName)) p+= c.score||0;
-    p = Math.max(0, Math.min(1, p));
-
-    // streaks: keep it fun—> extra points if you keep laughing
-    if (p >= 0.6) { streak += 1; if (streak%4===0) streakBonus += 1; } // +1 bonus per ~1 s sustained (4 ticks)
-    else { streak = 0; }
-
-    // EMA smoothing for the UI
-    emaPct = EMA_ALPHA*(p*100) + (1-EMA_ALPHA)*emaPct;
-
-    // accumulate
-    laughSum += p; frames++;
-
-    // JoyRank formula (fair + simple):
-    // base = 100 * mean(laughter)
-    // penalty = 15 * loudPenalty
-    // bonus = streakBonus * 2
-    const base = 100 * (laughSum/frames);
-    const joy = Math.max(0, Math.round(base - 15*penalty + 2*streakBonus));
-
-    $("#laughTxt").textContent = "Laughter " + (p*100).toFixed(1) + "%";
-    $("#laughBar").style.width = (p*100).toFixed(1) + "%";
-    $("#happyTxt").textContent = "JoyRank " + joy;
-    $("#happyBar").style.width = Math.min(100, joy) + "%";
-
-    t += dt;
-    $("#t").textContent = (t/1000).toFixed(1);
-
-    if (t >= T){
-      running=false; $("#stop").disabled=true; $("#again").disabled=false;
-      setStatus("Finished.", "");
-      const finalJoy = Math.max(0, Math.round(100*(laughSum/frames) - 15*penalty + 2*streakBonus));
-      saveScore("laugh", playerName, finalJoy);
-      return;
+    try {
+      if (MODE === "laugh") await startLaughRound(n);
+      else await startShakeRound(n);
+    } catch (e){
+      console.error(e);
+      setStatus(e.message || "Could not start.", "bad");
+      $("#start").disabled=false; $("#stop").disabled=true; $("#again").disabled=false;
     }
-    setTimeout(loop, dt);
   };
-  loop();
-}
 
-/* ========================= S H A K E  (device motion) ========================= */
-let haveMotion=false, lastTS=0, accE=0, rotE=0, accLive=0, rotLive=0, timerId=0;
+  $("#stop").onclick = () => stopRound();
+  $("#again").onclick = () => {
+    $("#start").disabled=false; $("#again").disabled=true; $("#stop").disabled=true;
+    setStatus("Ready.");
+    resetMeters();
+  };
 
-function cleanupShake(){
-  try{ window.removeEventListener("devicemotion", onMotion, { passive:true }); }catch{}
-  clearTimeout(timerId);
-}
-function onMotion(e){
-  haveMotion=true;
-  const now = (e.timeStamp && Number.isFinite(e.timeStamp)) ? e.timeStamp : performance.now();
-  let dt = lastTS ? (now - lastTS)/1000 : 0; if (dt <= 0 || dt > 0.25) dt = 0.02;
-  lastTS = now;
-
-  const a = (()=>{ // linear accel magnitude
-    const A=e.acceleration, G=e.accelerationIncludingGravity, g0=9.80665;
-    let ax=0,ay=0,az=0, useG=false;
-    if (A && A.x!==null){ ax=A.x||0; ay=A.y||0; az=A.z||0; }
-    else if (G && G.x!==null){ ax=G.x||0; ay=G.y||0; az=G.z||0; useG=true; }
-    const mag = Math.hypot(ax,ay,az);
-    return useG ? Math.max(0, Math.abs(mag - g0)) : mag;
-  })();
-
-  const rDeg = (()=>{ const r=e.rotationRate||{}; return Math.hypot(r.alpha||0, r.beta||0, r.gamma||0); })();
-  const rRad = rDeg * Math.PI/180;
-
-  accE += (a*a)*dt; rotE += (rRad*rRad)*dt;
-  accLive = a; rotLive = rDeg;
-}
-
-async function startShakeRound(playerName){
-  setStatus("Requesting motion…");
-  $("#permInfo").textContent = "";
-  // iOS permission
-  if (typeof DeviceMotionEvent !== "undefined" && typeof DeviceMotionEvent.requestPermission === "function"){
-    const res = await DeviceMotionEvent.requestPermission();
-    $("#permInfo").textContent = "Motion perm: " + res;
-    if (res !== "granted") throw new Error("Motion access denied.");
+  function stopRound(){
+    running=false;
+    cleanupLaugh();
+    cleanupShake();
+    $("#stop").disabled = true; $("#again").disabled = false;
+    setStatus("Stopped.");
+  }
+  function resetMeters(){
+    $("#rmsBar").style.width="0%"; $("#rmsTxt").textContent="RMS 0.000";
+    $("#laughBar").style.width="0%"; $("#laughTxt").textContent="Laughter 0.0%";
+    $("#happyBar").style.width="0%"; $("#happyTxt").textContent="JoyRank 0";
+    $("#accBar").style.width="0%"; $("#accTxt").textContent="acc 0.00 m/s²";
+    $("#rotBar").style.width="0%"; $("#rotTxt").textContent="rot 0.0 °/s";
+    $("#shakeBar").style.width="0%"; $("#shakeTxt").textContent="ShakeRank 0";
+    $("#t").textContent="0.0";
+    $("#log").textContent="";
   }
 
-  // Reset state
-  running=true; haveMotion=false; lastTS=0; accE=0; rotE=0; accLive=0; rotLive=0;
-  window.addEventListener("devicemotion", onMotion, { passive:true });
+  /* ========================= L A U G H  (mic + YAMNet via MediaPipe) ========================= */
+  const JSDELIVR = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-audio@0.10.20";
+  const UNPKG    = "https://unpkg.com/@mediapipe/tasks-audio@0.10.20";
+  const WASM_DIR = "/wasm";
+  const MODEL_PRIMARY  = "https://tfhub.dev/google/lite-model/yamnet/classification/tflite/1?lite-format=tflite";
+  const MODEL_FALLBACK = "https://storage.googleapis.com/mediapipe-models/audio_classifier/yamnet/float32/1/yamnet.tflite";
 
-  // Warn if desktop/no sensors
-  setTimeout(()=>{ if (!haveMotion) setStatus("No motion data (desktop or disabled).", "warn"); }, 2000);
+  let audioClassifier=null, laughCtx=null, analyser=null, meterBuf=null, rafId=0, procNode=null;
+  let ring=null, ridx=0, need=0;
+  const EMA_ALPHA = 0.2; let emaPct=0;
+  let baseRMS=0;
 
-  setStatus("Shake now! 10s", "ok");
+  function laughLabel(name){
+    const n=name.toLowerCase();
+    return n.includes("laugh")||n.includes("giggl")||n.includes("chuckle")||n.includes("chortle")||n.includes("snicker");
+  }
 
-  // 10s loop @ 60fps visual
-  let t=0, T=10_000, dt=1000/60;
-  (function loop(){
-    if (!running) return;
-    t += dt;
-    // live meters
-    $("#accTxt").textContent = `acc ${accLive.toFixed(2)} m/s²`;
-    $("#rotTxt").textContent = `rot ${rotLive.toFixed(1)} °/s`;
-    $("#accBar").style.width = clamp(accLive*6, 0, 100) + "%";
-    $("#rotBar").style.width = clamp(rotLive*0.6, 0, 100) + "%";
-
-    const shake = Math.round(accE*6 + rotE*2);
-    $("#shakeTxt").textContent = `ShakeRank ${shake}`;
-    $("#shakeBar").style.width = clamp(shake/5, 0, 100) + "%";
-    $("#t").textContent = (t/1000).toFixed(1);
-
-    if (t >= T){
-      running=false; $("#stop").disabled=true; $("#again").disabled=false;
-      setStatus("Finished.", "");
-      const finalShake = Math.round(accE*6 + rotE*2);
-      saveScore("shake", playerName, finalShake);
-      return;
+  async function importTasksAudio(){
+    try{ log("Loading @mediapipe/tasks-audio from jsDelivr…"); return await import(JSDELIVR); }
+    catch{ log("Falling back to unpkg…"); return await import(UNPKG); }
+  }
+  async function ensureClassifier(){
+    if (audioClassifier) return;
+    const { FilesetResolver, AudioClassifier } = await importTasksAudio();
+    let fileset;
+    try{ fileset = await FilesetResolver.forAudioTasks(JSDELIVR + WASM_DIR); }
+    catch{ fileset = await FilesetResolver.forAudioTasks(UNPKG + WASM_DIR); }
+    try {
+      audioClassifier = await AudioClassifier.createFromOptions(fileset, { baseOptions:{ modelAssetPath: MODEL_PRIMARY }, runningMode:"AUDIO_CLIPS" });
+      log("Model loaded from tfhub.");
+    } catch {
+      audioClassifier = await AudioClassifier.createFromOptions(fileset, { baseOptions:{ modelAssetPath: MODEL_FALLBACK }, runningMode:"AUDIO_CLIPS" });
+      log("Model loaded from GCS.");
     }
-    timerId = setTimeout(loop, dt);
-  })();
-}
-</script>
+  }
+
+  function startRmsMeter(source){
+    analyser = laughCtx.createAnalyser(); analyser.fftSize = 1024;
+    meterBuf = new Float32Array(analyser.fftSize);
+    source.connect(analyser);
+    const tick = () => {
+      analyser.getFloatTimeDomainData(meterBuf);
+      let s=0; for (let i=0;i<meterBuf.length;i++) s+=meterBuf[i]*meterBuf[i];
+      const rms = Math.sqrt(s/meterBuf.length);
+      $("#rmsTxt").textContent = "RMS " + rms.toFixed(3);
+      $("#rmsBar").style.width = Math.min(100, rms*200) + "%";
+      rafId = requestAnimationFrame(tick);
+    };
+    tick();
+  }
+
+  function cleanupLaugh(){
+    try{ procNode && procNode.disconnect(); }catch{}
+    try{ analyser && analyser.disconnect(); }catch{}
+    cancelAnimationFrame(rafId);
+    try{ laughCtx && laughCtx.close(); }catch{}
+    procNode=null; analyser=null; laughCtx=null; audioClassifier && (audioClassifier=null); // leave null so re-init if needed
+  }
+
+  async function startLaughRound(playerName){
+    setStatus("Preparing mic…");
+    await ensureClassifier();
+
+    const stream = await navigator.mediaDevices.getUserMedia({ audio:true });
+    const AC = window.AudioContext || window.webkitAudioContext;
+    laughCtx = new AC({ sampleRate: 16000 });
+    if (laughCtx.state === "suspended") await laughCtx.resume();
+    const source = laughCtx.createMediaStreamSource(stream);
+
+    // 2s calibration for baseline noise
+    const tmpAnalyser = laughCtx.createAnalyser(); tmpAnalyser.fftSize = 1024;
+    const tmpBuf = new Float32Array(tmpAnalyser.fftSize);
+    source.connect(tmpAnalyser);
+    setStatus("Calibrating 2s… stay quiet.", "warn");
+    let sum=0, cnt=0; const t0=performance.now();
+    while (performance.now()-t0 < 2000){
+      tmpAnalyser.getFloatTimeDomainData(tmpBuf);
+      let ss=0; for (let i=0;i<tmpBuf.length;i++) ss+=tmpBuf[i]*tmpBuf[i];
+      sum += Math.sqrt(ss/tmpBuf.length); cnt++;
+      await new Promise(r=>setTimeout(r, 50));
+    }
+    baseRMS = cnt? (sum/cnt) : 0;
+    try{ source.disconnect(tmpAnalyser); }catch{}
+    setStatus("Go! Laugh for 10s!", "ok");
+
+    // meters + ring buffer for model
+    startRmsMeter(source);
+    ring = new Float32Array(16000); ridx=0; need = ring.length;
+    procNode = laughCtx.createScriptProcessor(16384, 1, 1);
+    source.connect(procNode); procNode.connect(laughCtx.destination);
+
+    // scoring buffers
+    let frames=0, laughSum=0, penalty=0, streak=0, streakBonus=0;
+    emaPct=0;
+
+    running=true;
+    let t=0, T=10_000, dt=250;
+
+    procNode.onaudioprocess = (e) => {
+      const x = e.inputBuffer.getChannelData(0);
+      for (let i=0;i<x.length;i++){ ring[ridx++] = x[i]; if (ridx===ring.length) ridx=0; }
+    };
+
+    // main loop @ 4 Hz
+    const loop = () => {
+      if (!running) return;
+
+      // shout penalty from current RMS
+      analyser.getFloatTimeDomainData(meterBuf);
+      let s=0; for (let i=0;i<meterBuf.length;i++) s+=meterBuf[i]*meterBuf[i];
+      const rms = Math.sqrt(s/meterBuf.length);
+      const thr = baseRMS + 0.10;
+      if (rms > thr) penalty += Math.min(0.03, rms - thr);
+
+      // 1s slice
+      const out = new Float32Array(ring.length);
+      const tail = ring.length - ridx;
+      out.set(ring.subarray(ridx), 0);
+      out.set(ring.subarray(0, ridx), tail);
+
+      // classify (sync)
+      let results=[]; try { results = audioClassifier.classify(out, laughCtx.sampleRate); } catch(err){ log("classify error: "+(err?.message||err)); }
+      const cats = results?.[0]?.classifications?.[0]?.categories || [];
+      const top5 = [...cats].sort((a,b)=>(b.score||0)-(a.score||0)).slice(0,5)
+        .map(c => `${(c.score*100).toFixed(1)}% ${c.categoryName}`).join(" | ");
+      log(top5 || "(no cats)");
+
+      // laughter prob
+      let p=0; for (const c of cats) if (c?.categoryName && laughLabel(c.categoryName)) p+= c.score||0;
+      p = Math.max(0, Math.min(1, p));
+
+      // streaks: keep it fun—> extra points if you keep laughing
+      if (p >= 0.6) { streak += 1; if (streak%4===0) streakBonus += 1; } // +1 bonus per ~1 s sustained (4 ticks)
+      else { streak = 0; }
+
+      // EMA smoothing for the UI
+      emaPct = EMA_ALPHA*(p*100) + (1-EMA_ALPHA)*emaPct;
+
+      // accumulate
+      laughSum += p; frames++;
+
+      // JoyRank formula (fair + simple):
+      // base = 100 * mean(laughter)
+      // penalty = 15 * loudPenalty
+      // bonus = streakBonus * 2
+      const base = 100 * (laughSum/frames);
+      const joy = Math.max(0, Math.round(base - 15*penalty + 2*streakBonus));
+
+      $("#laughTxt").textContent = "Laughter " + (p*100).toFixed(1) + "%";
+      $("#laughBar").style.width = (p*100).toFixed(1) + "%";
+      $("#happyTxt").textContent = "JoyRank " + joy;
+      $("#happyBar").style.width = Math.min(100, joy) + "%";
+
+      t += dt;
+      $("#t").textContent = (t/1000).toFixed(1);
+
+      if (t >= T){
+        running=false; $("#stop").disabled=true; $("#again").disabled=false;
+        setStatus("Finished.", "");
+        const finalJoy = Math.max(0, Math.round(100*(laughSum/frames) - 15*penalty + 2*streakBonus));
+        saveScore("laugh", playerName, finalJoy);
+        return;
+      }
+      setTimeout(loop, dt);
+    };
+    loop();
+  }
+
+  /* ========================= S H A K E  (device motion) ========================= */
+  let haveMotion=false, lastTS=0, accE=0, rotE=0, accLive=0, rotLive=0, timerId=0;
+
+  function cleanupShake(){
+    try{ window.removeEventListener("devicemotion", onMotion, { passive:true }); }catch{}
+    clearTimeout(timerId);
+  }
+  function onMotion(e){
+    haveMotion=true;
+    const now = (e.timeStamp && Number.isFinite(e.timeStamp)) ? e.timeStamp : performance.now();
+    let dt = lastTS ? (now - lastTS)/1000 : 0; if (dt <= 0 || dt > 0.25) dt = 0.02;
+    lastTS = now;
+
+    const a = (()=>{ // linear accel magnitude
+      const A=e.acceleration, G=e.accelerationIncludingGravity, g0=9.80665;
+      let ax=0,ay=0,az=0, useG=false;
+      if (A && A.x!==null){ ax=A.x||0; ay=A.y||0; az=A.z||0; }
+      else if (G && G.x!==null){ ax=G.x||0; ay=G.y||0; az=G.z||0; useG=true; }
+      const mag = Math.hypot(ax,ay,az);
+      return useG ? Math.max(0, Math.abs(mag - g0)) : mag;
+    })();
+
+    const rDeg = (()=>{ const r=e.rotationRate||{}; return Math.hypot(r.alpha||0, r.beta||0, r.gamma||0); })();
+    const rRad = rDeg * Math.PI/180;
+
+    accE += (a*a)*dt; rotE += (rRad*rRad)*dt;
+    accLive = a; rotLive = rDeg;
+  }
+
+  async function startShakeRound(playerName){
+    setStatus("Requesting motion…");
+    $("#permInfo").textContent = "";
+    // iOS permission
+    if (typeof DeviceMotionEvent !== "undefined" && typeof DeviceMotionEvent.requestPermission === "function"){
+      const res = await DeviceMotionEvent.requestPermission();
+      $("#permInfo").textContent = "Motion perm: " + res;
+      if (res !== "granted") throw new Error("Motion access denied.");
+    }
+
+    // Reset state
+    running=true; haveMotion=false; lastTS=0; accE=0; rotE=0; accLive=0; rotLive=0;
+    window.addEventListener("devicemotion", onMotion, { passive:true });
+
+    // Warn if desktop/no sensors
+    setTimeout(()=>{ if (!haveMotion) setStatus("No motion data (desktop or disabled).", "warn"); }, 2000);
+
+    setStatus("Shake now! 10s", "ok");
+
+    // 10s loop @ 60fps visual
+    let t=0, T=10_000, dt=1000/60;
+    (function loop(){
+      if (!running) return;
+      t += dt;
+      // live meters
+      $("#accTxt").textContent = `acc ${accLive.toFixed(2)} m/s²`;
+      $("#rotTxt").textContent = `rot ${rotLive.toFixed(1)} °/s`;
+      $("#accBar").style.width = clamp(accLive*6, 0, 100) + "%";
+      $("#rotBar").style.width = clamp(rotLive*0.6, 0, 100) + "%";
+
+      const shake = Math.round(accE*6 + rotE*2);
+      $("#shakeTxt").textContent = `ShakeRank ${shake}`;
+      $("#shakeBar").style.width = clamp(shake/5, 0, 100) + "%";
+      $("#t").textContent = (t/1000).toFixed(1);
+
+      if (t >= T){
+        running=false; $("#stop").disabled=true; $("#again").disabled=false;
+        setStatus("Finished.", "");
+        const finalShake = Math.round(accE*6 + rotE*2);
+        saveScore("shake", playerName, finalShake);
+        return;
+      }
+      timerId = setTimeout(loop, dt);
+    })();
+  }
+
+  /* ========= Extra UI polish & FX (non-intrusive; core logic unchanged) ========= */
+
+  // Insecure banner
+  const banner = $("#secureBanner");
+  if (!isSecure()) banner.hidden = false;
+
+  // Simple toast helper
+  const toastEl = $("#toast");
+  let toastTimer = 0;
+  function toast(msg){
+    toastEl.textContent = msg;
+    toastEl.classList.add("show");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(()=>toastEl.classList.remove("show"), 1800);
+  }
+  // Show toasts when permission info updates
+  const permObs = new MutationObserver(() => {
+    const t = $("#permInfo").textContent.trim();
+    if (t) toast(t);
+  });
+  permObs.observe($("#permInfo"), { childList:true, subtree:true });
+
+  // About modal open/close
+  const aboutBtn = $("#aboutBtn"), modal = $("#aboutModal");
+  function openModal(){ modal.setAttribute("open",""); aboutBtn.setAttribute("aria-expanded","true"); modal.querySelector("[data-close]")?.focus(); }
+  function closeModal(){ modal.removeAttribute("open"); aboutBtn.setAttribute("aria-expanded","false"); aboutBtn.focus(); }
+  aboutBtn.addEventListener("click", openModal);
+  modal.addEventListener("click", (e)=>{ const el = e.target; if (el instanceof Element && el.closest("[data-close]")) closeModal(); });
+  modal.addEventListener("keydown", (e)=>{ if (e.key==="Escape") closeModal(); });
+
+  // Prefers-reduced-motion
+  const PRM = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  /* ---- Laugh confetti (canvas particles) ---- */
+  const confetti = {
+    enabled: !PRM,
+    max: 120,
+    parts: [],
+    ctx: null,
+    lastT: 0,
+    init(){
+      const c = $("#fx-laugh");
+      if (!c || !c.getContext) return;
+      this.ctx = c.getContext("2d");
+      const resize = () => { c.width = c.clientWidth; c.height = c.clientHeight; };
+      resize(); new ResizeObserver(resize).observe(c);
+      requestAnimationFrame(this.loop.bind(this));
+    },
+    spawn(n){
+      if (!this.ctx) return;
+      for (let i=0;i<n && this.parts.length<this.max;i++){
+        this.parts.push({
+          x: Math.random()*this.ctx.canvas.width,
+          y: -10,
+          vx: (Math.random()*1.4-0.7),
+          vy: 1+Math.random()*1.2,
+          s: 2+Math.random()*4,
+          a: 0.9+Math.random()*0.1,
+          hue: 180 + Math.random()*120
+        });
+      }
+    },
+    loop(ts){
+      if (!this.ctx){ return; }
+      const dt = this.lastT? (ts-this.lastT)/16.7 : 1; this.lastT=ts;
+      const ctx = this.ctx, W = ctx.canvas.width, H = ctx.canvas.height;
+      ctx.clearRect(0,0,W,H);
+
+      // Spawn rate scales with emaPct (0..100, from core)
+      if (running && MODE==="laugh" && this.enabled){
+        const burst = Math.floor((Math.max(0, Math.min(100, (typeof emaPct==="number"?emaPct:0))) / 12));
+        this.spawn(burst);
+      }
+
+      // Update/draw
+      for (let i=this.parts.length-1;i>=0;i--){
+        const p=this.parts[i];
+        p.x += p.vx*dt; p.y += p.vy*dt; p.vy += 0.02*dt; p.a -= 0.008*dt;
+        if (p.y>H || p.a<=0){ this.parts.splice(i,1); continue; }
+        ctx.globalAlpha = Math.max(0, Math.min(1, p.a));
+        ctx.fillStyle = `hsl(${p.hue} 80% 60%)`;
+        ctx.beginPath(); ctx.arc(p.x, p.y, p.s, 0, Math.PI*2); ctx.fill();
+      }
+      requestAnimationFrame(this.loop.bind(this));
+    }
+  };
+  confetti.init();
+
+  /* ---- Shake bottle visualization ---- */
+  const bottle = $("#bottle"), foam = $("#foam");
+  function shakeVizLoop(){
+    if (!bottle) return;
+    const r = (typeof rotLive==="number") ? rotLive : 0;
+    const a = (typeof accLive==="number") ? accLive : 0;
+    // Tilt by rotation, subtle squash by acceleration
+    const tilt = clamp(r*0.05, -25, 25);
+    const squash = 1 - clamp(a*0.02, 0, 0.15);
+    bottle.style.transform = `rotate(${tilt}deg) scale(${1/squash}, ${squash})`;
+    foam.style.height = clamp((a*6 + r*0.12), 12, 85) + "%";
+    if (running && MODE==="shake" && !PRM) requestAnimationFrame(shakeVizLoop);
+  }
+
+  // Watch start/finish to show celebratory micro-copy (without touching core logic)
+  const statusObs = new MutationObserver(()=>{
+    const txt = $("#status").textContent || "";
+    if (/Finished\./.test(txt)){
+      const s = (MODE==="laugh") ? parseInt(($("#happyTxt").textContent||"").replace(/\D/g,"")||"0",10)
+                                 : parseInt(($("#shakeTxt").textContent||"").replace(/\D/g,"")||"0",10);
+      const msg = (MODE==="laugh")
+        ? (s>=120 ? "Giggle cascade! 🎉" : s>=80 ? "That’s a sunny chuckle! ☀️" : "Nice warmup! 😄")
+        : (s>=300 ? "You’re a human maraca! 🥳" : s>=180 ? "Boogie bottle! 💃" : "Solid shake! 🕺");
+      toast(msg);
+    }
+  });
+  statusObs.observe($("#status"), { childList:true, subtree:true });
+
+  // Kick shake viz when the meters show up and running flips true
+  const runObs = new MutationObserver(()=>{
+    if (running && MODE==="shake" && !PRM) requestAnimationFrame(shakeVizLoop);
+  });
+  runObs.observe($("#t"), { childList:true, subtree:true });
+
+  // Initial scoreboard render for default mode already called in core
+
+  </script>
+</body>
 </html>
