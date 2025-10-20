@@ -2,7 +2,7 @@
 <html lang="en">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Microphone Debug (HTTPS/localhost only)</title>
+<title>Mic + Laughter Scorer (100% in-browser)</title>
 <style>
   body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; margin: 2rem; }
   .row { display: flex; gap: .75rem; align-items: center; flex-wrap: wrap; }
@@ -11,12 +11,14 @@
   .mono { font-variant-numeric: tabular-nums; font-feature-settings:"tnum"; }
   .ok { color:#16a34a } .bad{ color:#ef4444 } .warn{ color:#eab308 } .muted{ color:#6b7280 }
   .bar { height: 14px; background:#e5e7eb; border-radius:999px; overflow:hidden; width: 360px; max-width: 100%; }
-  .fill { height:100%; width:0%; background: linear-gradient(90deg,#93c5fd,#2563eb); }
+  .fill { height:100%; width:0%; background: linear-gradient(90deg,#93c5fd,#2563eb); transition: width .12s linear; }
+  .fill.green { background: linear-gradient(90deg,#86efac,#16a34a); }
+  .fill.yellow { background: linear-gradient(90deg,#fde68a,#f59e0b); }
   pre { background:#0b1220; color:#e5e7eb; padding: .75rem 1rem; border-radius: .5rem; overflow:auto }
 </style>
 
-<h1>Microphone Access Debug</h1>
-<p class="muted">This page checks only one thing: can this browser give us a microphone stream <b>after a user click</b>?</p>
+<h1>Microphone + Laughter Scorer</h1>
+<p class="muted">Enable mic → see live RMS and <b>Laughter %</b> (on-device YAMNet). HappyScore = EMA(laughter) × 100. This page is for testing only.</p>
 
 <div class="row">
   <button id="enable" class="primary">Enable Microphone</button>
@@ -32,8 +34,20 @@
 
 <div class="row" style="margin:.5rem 0 1rem">
   <div class="bar"><div id="level" class="fill"></div></div>
-  <span class="mono" id="rms">0.000</span>
+  <span class="mono" id="rms">RMS 0.000</span>
 </div>
+
+<div class="row" style="margin:.25rem 0 1rem">
+  <div class="bar" title="Laughter probability"><div id="laughBar" class="fill green"></div></div>
+  <span class="mono" id="laugh">Laughter 0.0%</span>
+</div>
+
+<div class="row" style="margin:.25rem 0 1.25rem">
+  <div class="bar" title="HappyScore (EMA of laughter × 100)"><div id="happyBar" class="fill yellow"></div></div>
+  <span class="mono" id="happy">HappyScore 0</span>
+</div>
+
+<p class="muted">10s running average (for sanity): <span class="mono" id="avg10">0.0%</span></p>
 
 <details>
   <summary>How to fix if blocked</summary>
@@ -69,17 +83,15 @@ $('#secure').className = isSecure() ? 'ok' : 'bad';
         $('#perm').textContent = p.state;
         $('#perm').className = (p.state === 'granted') ? 'ok' : (p.state === 'denied') ? 'bad' : 'warn';
       };
-    } else {
-      $('#perm').textContent = 'unsupported';
-      $('#perm').className = 'muted';
-    }
-  } catch(e) {
-    $('#perm').textContent = 'error';
-    $('#perm').className = 'muted';
-  }
+    } else { $('#perm').textContent = 'unsupported'; $('#perm').className = 'muted'; }
+  } catch(e) { $('#perm').textContent = 'error'; $('#perm').className = 'muted'; }
 })();
 
 let ctx, src, analyser, buf, raf;
+let tf, yamnetModel, ring, ridx = 0, procNode;
+let ema = null, sum10 = 0, count10 = 0, avgTimer;
+const EMA_ALPHA = 0.2; // smoother = smaller
+
 function startMeter(stream) {
   const AC = window.AudioContext || window.webkitAudioContext;
   ctx = new AC({ sampleRate: 16000 });
@@ -90,15 +102,87 @@ function startMeter(stream) {
   buf = new Float32Array(analyser.fftSize);
   src.connect(analyser);
 
+  // ring buffer ~1.0s @16k for YAMNet
+  ring = new Float32Array(16000); ridx = 0;
+  procNode = ctx.createScriptProcessor(16384, 1, 1);
+  src.connect(procNode); procNode.connect(ctx.destination);
+  procNode.onaudioprocess = (e) => {
+    const x = e.inputBuffer.getChannelData(0);
+    for (let i=0;i<x.length;i++){ ring[ridx++] = x[i]; if (ridx===ring.length) ridx=0; }
+  };
+
   function tick() {
     analyser.getFloatTimeDomainData(buf);
     let s=0; for (let i=0;i<buf.length;i++) s+=buf[i]*buf[i];
-    const rms = Math.sqrt(s/buf.length); // ~0..1
-    $('#rms').textContent = rms.toFixed(3);
+    const rms = Math.sqrt(s/buf.length);
+    $('#rms').textContent = 'RMS ' + rms.toFixed(3);
     $('#level').style.width = Math.min(100, rms*200) + '%';
     raf = requestAnimationFrame(tick);
   }
   tick();
+}
+
+async function loadYamnet() {
+  // Load TFJS + YAMNet via CDN (no build tools)
+  if (!window.tf) {
+    await new Promise((res,rej)=>{ const s=document.createElement('script'); s.src='https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.18.0/dist/tf.min.js'; s.onload=res; s.onerror=rej; document.head.appendChild(s); });
+  }
+  tf = window.tf;
+  await new Promise((res,rej)=>{ const s=document.createElement('script'); s.src='https://cdn.jsdelivr.net/npm/@tensorflow-models/yamnet@1.0.1/dist/yamnet.min.js'; s.onload=res; s.onerror=rej; document.head.appendChild(s); });
+  yamnetModel = await window.yamnet.load();
+  log('YAMNet loaded.');
+}
+
+function slice1sFromRing() {
+  const out = new Float32Array(16000);
+  const tail = ring.length - ridx;
+  out.set(ring.subarray(ridx), 0);
+  out.set(ring.subarray(0, ridx).subarray(0, 16000 - tail), tail);
+  return out;
+}
+
+async function classifyLoop() {
+  // every ~250ms: get 1s slice, run model, read laughter prob
+  const dt = 250;
+  let lastTs = performance.now();
+  function step() {
+    const now = performance.now();
+    if (now - lastTs >= dt) {
+      lastTs = now;
+      const slice = slice1sFromRing();
+      yamnetModel.predict(slice).then(res => {
+        // res may be array [scores, embeddings, spectrogram] or object; normalize to scores Float32Array
+        const scores = Array.isArray(res) ? res[0] : res.scores;
+        const labels = window.yamnet.YAMNET_CLASSES;
+        // find laughter-ish labels
+        let pLaugh = 0, c=0;
+        for (let i=0;i<labels.length;i++){
+          const n = labels[i].toLowerCase();
+          if (n.includes('laughter') || n.includes('giggl')) { pLaugh += scores[i]; c++; }
+        }
+        pLaugh = c ? pLaugh/c : 0;
+
+        // EMA smoothing
+        ema = (ema === null) ? pLaugh : (ema*(1-EMA_ALPHA) + pLaugh*EMA_ALPHA);
+
+        // UI
+        const laughPct = Math.round(pLaugh * 100);
+        const happyScore = Math.round((ema||0) * 100);
+        $('#laugh').textContent = `Laughter ${laughPct}%`;
+        $('#laughBar').style.width = Math.min(100, laughPct) + '%';
+        $('#happy').textContent = `HappyScore ${happyScore}`;
+        $('#happyBar').style.width = Math.min(100, happyScore) + '%';
+
+        // 10s running average just for sanity
+        sum10 += pLaugh; count10++;
+        const win = Math.min(40, count10); // ~40 ticks ≈ 10s
+        const avg = (sum10 / count10) * 100;
+        $('#avg10').textContent = avg.toFixed(1) + '%';
+      }).catch(err => console.warn('predict err', err));
+    }
+    if (running) requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
 }
 
 $('#enable').onclick = async () => {
@@ -109,23 +193,27 @@ $('#enable').onclick = async () => {
   if (!isSecure()) {
     $('#status').textContent = 'Not a secure context. Use HTTPS or http://localhost.';
     $('#status').className = 'bad';
-    alert('Microphone requires HTTPS or http://localhost.\nOpen this page via GitHub Pages (HTTPS) or a local server.');
+    alert('Microphone requires HTTPS or http://localhost.\nOpen via GitHub Pages (HTTPS) or a local server.');
     return;
   }
 
   try {
-    // On iOS/Safari, AudioContext must begin inside a user gesture
+    // iOS/Safari: start AudioContext inside this gesture
     const AC = window.AudioContext || window.webkitAudioContext;
     const tmp = new AC({ sampleRate: 16000 });
-    if (tmp.state === 'suspended') await tmp.resume(); // gesture present
-    tmp.close(); // we’ll create a fresh one in startMeter
+    if (tmp.state === 'suspended') await tmp.resume();
+    tmp.close();
 
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    $('#status').textContent = 'Microphone active.';
+    $('#status').textContent = 'Microphone active. Loading YAMNet…';
     $('#status').className = 'ok';
     $('#enable').disabled = true; $('#stop').disabled = false;
     log('Got stream: ' + JSON.stringify(stream.getAudioTracks()[0].getSettings()));
     startMeter(stream);
+    await loadYamnet();
+    $('#status').textContent = 'Scoring laughter on-device.';
+    running = true;
+    classifyLoop();
   } catch (e) {
     console.error(e);
     let msg = 'Could not access the microphone.';
@@ -147,7 +235,9 @@ $('#enable').onclick = async () => {
   }
 };
 
+let running = false;
 $('#stop').onclick = () => {
+  running = false;
   cancelAnimationFrame(raf);
   try { ctx && ctx.close(); } catch(_) {}
   $('#enable').disabled = false; $('#stop').disabled = true;
